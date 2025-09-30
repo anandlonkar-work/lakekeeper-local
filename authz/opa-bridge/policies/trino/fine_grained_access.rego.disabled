@@ -1,0 +1,114 @@
+package trino
+
+import data.trino.allow_column
+import data.trino.allow_row
+
+# Main authorization decisions that integrate column and row level access
+
+# Allow table access with column and row filtering
+allow if {
+    # Check base table permissions first
+    has_table_access(
+        input.action.resource.table.catalogName,
+        input.action.resource.table.schemaName, 
+        input.action.resource.table.tableName,
+        "read_data"
+    )
+    
+    # Then check column-level permissions
+    allow_column.allow_column_access
+    
+    # Finally check row-level permissions
+    allow_row.allow_row_access
+}
+
+# Allow modify operations with column-level checks
+allow if {
+    input.action.operation in ["InsertIntoTable", "UpdateTableColumns", "DeleteFromTable"]
+    
+    # Check base table permissions
+    has_table_access(
+        input.action.resource.table.catalogName,
+        input.action.resource.table.schemaName,
+        input.action.resource.table.tableName,
+        "write_data"
+    )    # Check column-level modify permissions
+    allow_column.allow_column_modify
+    
+    # Check row-level access for modifications
+    allow_row.allow_row_access
+}
+
+# Allow schema operations with column visibility filtering
+allow if {
+    input.action.operation in ["ShowColumns", "DescribeTable", "ShowTables"]
+    
+    # Check base table permissions
+    trino.require_table_access(
+        input.action.resource.table.catalogName,
+        input.action.resource.table.schemaName,
+        input.action.resource.table.tableName,
+        "get_metadata"
+    )
+    
+    # Apply column filtering
+    allow_column.allow_column_describe
+}
+
+# Query rewriting for column filtering
+rewrite_query(original_query) := rewritten_query if {
+    catalog := input.action.resource.table.catalogName
+    schema := input.action.resource.table.schemaName
+    table := input.action.resource.table.tableName
+    
+    # Get accessible columns
+    accessible_columns := allow_column.filter_columns(catalog, schema, table)
+    
+    # Apply row-level filters
+    row_filtered_query := allow_row.apply_row_filters(original_query, catalog, schema, table)
+    
+    # Apply column filtering (simplified - actual implementation would parse SQL)
+    column_list := format_column_list(accessible_columns)
+    rewritten_query := replace_select_columns(row_filtered_query, column_list)
+}
+
+# Helper functions for query rewriting
+format_column_list(columns) := formatted if {
+    count(columns) == 0
+    formatted := "NULL as no_accessible_columns"
+}
+
+format_column_list(columns) := formatted if {
+    count(columns) > 0
+    column_names := [col.name | col := columns[_]]
+    formatted := concat(", ", column_names)
+}
+
+# Replace SELECT * with specific columns (simplified)
+replace_select_columns(query, column_list) := result if {
+    # This is a simplified implementation
+    # Real implementation would use proper SQL parsing
+    contains(query, "SELECT *")
+    result := replace(query, "SELECT *", sprintf("SELECT %s", [column_list]))
+}
+
+replace_select_columns(query, column_list) := query if {
+    not contains(query, "SELECT *")
+}
+
+# Audit logging for fine-grained access
+audit_access(decision, details) := audit_entry if {
+    audit_entry := {
+        "timestamp": time.now_ns(),
+        "user": input.identity.user,
+        "decision": decision,
+        "operation": input.action.operation,
+        "resource": {
+            "catalog": input.action.resource.table.catalogName,
+            "schema": input.action.resource.table.schemaName,
+            "table": input.action.resource.table.tableName,
+            "columns": input.action.resource.columns
+        },
+        "details": details
+    }
+}

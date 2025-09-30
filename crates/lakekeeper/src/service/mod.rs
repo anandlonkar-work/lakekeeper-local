@@ -15,14 +15,15 @@ use std::{ops::Deref, str::FromStr};
 
 pub use authn::{Actor, UserId};
 pub use catalog::{
-    Catalog, CommitTableResponse, CreateNamespaceRequest, CreateNamespaceResponse,
-    CreateOrUpdateUserResponse, CreateTableRequest, CreateTableResponse, DeletionDetails,
-    DropFlags, GetNamespaceResponse, GetProjectResponse, GetStorageConfigResponse,
-    GetTableMetadataResponse, GetWarehouseResponse, ListFlags, ListNamespacesQuery,
-    ListNamespacesResponse, LoadTableResponse, NamespaceDropInfo, NamespaceIdent, NamespaceInfo,
-    Result, ServerInfo, TableCommit, TableCreation, TableIdent, TableInfo, TabularInfo,
-    Transaction, UndropTabularResponse, UpdateNamespacePropertiesRequest,
-    UpdateNamespacePropertiesResponse, ViewCommit, ViewMetadataWithLocation,
+    Catalog, ColumnPermission, CommitTableResponse, CreateColumnPermissionRequest,
+    CreateNamespaceRequest, CreateNamespaceResponse, CreateOrUpdateUserResponse,
+    CreateRowPolicyRequest, CreateTableRequest, CreateTableResponse, DeletionDetails, DropFlags,
+    GetNamespaceResponse, GetProjectResponse, GetStorageConfigResponse, GetTableMetadataResponse,
+    GetWarehouseResponse, ListFlags, ListNamespacesQuery, ListNamespacesResponse,
+    LoadTableResponse, NamespaceDropInfo, NamespaceIdent, NamespaceInfo, Result, RowPolicy,
+    ServerInfo, TableCommit, TableCreation, TableIdent, TableInfo, TabularInfo, Transaction,
+    UndropTabularResponse, UpdateNamespacePropertiesRequest, UpdateNamespacePropertiesResponse,
+    ViewCommit, ViewMetadataWithLocation,
 };
 pub use endpoint_statistics::EndpointStatisticsTrackerTx;
 use http::StatusCode;
@@ -133,6 +134,18 @@ pub struct TableId(uuid::Uuid);
 #[serde(transparent)]
 pub struct WarehouseId(pub(crate) uuid::Uuid);
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[serde(transparent)]
+pub struct ColumnId(uuid::Uuid);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[serde(transparent)]
+pub struct RowPolicyId(uuid::Uuid);
+
 impl NamespaceId {
     #[must_use]
     pub fn new_random() -> Self {
@@ -158,6 +171,30 @@ impl ViewId {
     #[must_use]
     pub fn new_random() -> Self {
         Self(uuid::Uuid::now_v7())
+    }
+}
+
+impl ColumnId {
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+
+    #[must_use]
+    pub fn as_uuid(&self) -> uuid::Uuid {
+        self.0
+    }
+}
+
+impl RowPolicyId {
+    #[must_use]
+    pub fn new_random() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+
+    #[must_use]
+    pub fn as_uuid(&self) -> uuid::Uuid {
+        self.0
     }
 }
 
@@ -451,6 +488,88 @@ impl TryFrom<TabularId> for TableId {
             )
             .into()),
         }
+    }
+}
+
+impl std::fmt::Display for ColumnId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for ColumnId {
+    type Target = uuid::Uuid;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<uuid::Uuid> for ColumnId {
+    fn from(uuid: uuid::Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl FromStr for ColumnId {
+    type Err = IcebergErrorResponse;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(ColumnId(uuid::Uuid::from_str(s).map_err(|e| {
+            ErrorModel::builder()
+                .code(StatusCode::BAD_REQUEST.into())
+                .message("Provided column id is not a valid UUID".to_string())
+                .r#type("ColumnIDIsNotUUID".to_string())
+                .source(Some(Box::new(e)))
+                .build()
+        })?))
+    }
+}
+
+impl From<ColumnId> for uuid::Uuid {
+    fn from(ident: ColumnId) -> Self {
+        ident.0
+    }
+}
+
+impl std::fmt::Display for RowPolicyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for RowPolicyId {
+    type Target = uuid::Uuid;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<uuid::Uuid> for RowPolicyId {
+    fn from(uuid: uuid::Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl FromStr for RowPolicyId {
+    type Err = IcebergErrorResponse;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(RowPolicyId(uuid::Uuid::from_str(s).map_err(|e| {
+            ErrorModel::builder()
+                .code(StatusCode::BAD_REQUEST.into())
+                .message("Provided row policy id is not a valid UUID".to_string())
+                .r#type("RowPolicyIDIsNotUUID".to_string())
+                .source(Some(Box::new(e)))
+                .build()
+        })?))
+    }
+}
+
+impl From<RowPolicyId> for uuid::Uuid {
+    fn from(ident: RowPolicyId) -> Self {
+        ident.0
     }
 }
 

@@ -65,17 +65,20 @@ use crate::{
     request_metadata::RequestMetadata,
     service::{
         authn::UserId,
+
         storage::StorageProfile,
         task_queue::{
             Task, TaskAttemptId, TaskCheckState, TaskEntity, TaskFilter, TaskId, TaskInput,
             TaskQueueName,
         },
-        Catalog, CreateNamespaceRequest, CreateNamespaceResponse, CreateOrUpdateUserResponse,
+        Catalog, ColumnId, ColumnPermission, CreateColumnPermissionRequest, CreateNamespaceRequest,
+        CreateNamespaceResponse, CreateOrUpdateUserResponse, CreateRowPolicyRequest,
         CreateTableResponse, GetNamespaceResponse, GetProjectResponse, GetTableMetadataResponse,
         GetWarehouseResponse, ListFlags, ListNamespacesQuery, LoadTableResponse, NamespaceDropInfo,
-        NamespaceId, NamespaceIdent, NamespaceInfo, ProjectId, Result, RoleId, ServerInfo,
-        TableCommit, TableCreation, TableId, TableIdent, TableInfo, TabularId, TabularInfo,
-        Transaction, UndropTabularResponse, ViewCommit, ViewId, WarehouseId, WarehouseStatus,
+        NamespaceId, NamespaceIdent, NamespaceInfo, ProjectId, Result, RoleId, RowPolicy,
+        RowPolicyId, ServerInfo, TableCommit, TableCreation, TableId, TableIdent, TableInfo,
+        TabularId, TabularInfo, Transaction, UndropTabularResponse, ViewCommit, ViewId,
+        WarehouseId, WarehouseStatus,
     },
     SecretIdent,
 };
@@ -836,5 +839,91 @@ impl Catalog for super::PostgresCatalog {
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
     ) -> Result<Option<GetTaskQueueConfigResponse>> {
         get_task_queue_config(transaction, warehouse_id, queue_name).await
+    }
+
+    // Column permission methods - placeholder implementations
+    async fn create_column_permission<'a>(
+        _table_id: TableId,
+        _request: CreateColumnPermissionRequest,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<ColumnPermission> {
+        // TODO: Implement column permission creation
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Column permissions not yet implemented", "ColumnPermission", None) })
+    }
+
+    async fn list_column_permissions<'a>(
+        _table_id: TableId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<ColumnPermission>> {
+        // TODO: Implement column permission listing
+        Ok(vec![])
+    }
+
+    async fn get_column_permission<'a>(
+        _column_id: ColumnId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Option<ColumnPermission>> {
+        // TODO: Implement column permission retrieval
+        Ok(None)
+    }
+
+    async fn delete_column_permission<'a>(
+        _column_id: ColumnId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<()> {
+        // TODO: Implement column permission deletion
+        Ok(())
+    }
+
+    // Row policy methods - placeholder implementations
+    async fn create_row_policy<'a>(
+        _table_id: TableId,
+        _request: CreateRowPolicyRequest,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<RowPolicy> {
+        // TODO: Implement row policy creation
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Row policies not yet implemented", "RowPolicy", None) })
+    }
+
+    async fn list_row_policies<'a>(
+        _table_id: TableId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<RowPolicy>> {
+        // TODO: Implement row policy listing
+        Ok(vec![])
+    }
+
+    async fn get_row_policy<'a>(
+        _policy_id: RowPolicyId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Option<RowPolicy>> {
+        // TODO: Implement row policy retrieval
+        Ok(None)
+    }
+
+    async fn update_row_policy<'a>(
+        _policy_id: RowPolicyId,
+        _request: CreateRowPolicyRequest,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<RowPolicy> {
+        // TODO: Implement row policy update
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Row policies not yet implemented", "RowPolicy", None) })
+    }
+
+    async fn delete_row_policy<'a>(
+        _policy_id: RowPolicyId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<()> {
+        // TODO: Implement row policy deletion
+        Ok(())
+    }
+
+    async fn get_applicable_row_policies<'a>(
+        _table_id: TableId,
+        _user_id: &UserId,
+        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<RowPolicy>> {
+        // TODO: Implement applicable row policy retrieval
+        Ok(vec![])
     }
 }

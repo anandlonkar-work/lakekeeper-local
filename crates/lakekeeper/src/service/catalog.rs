@@ -13,7 +13,7 @@ pub use iceberg_ext::catalog::rest::{CommitTableResponse, CreateTableRequest};
 use lakekeeper_io::Location;
 
 use super::{
-    storage::StorageProfile, NamespaceId, ProjectId, RoleId, TableId, TabularDetails, ViewId,
+    storage::StorageProfile, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, TableId, TabularDetails, ViewId,
     WarehouseId, WarehouseStatus,
 };
 pub use crate::api::iceberg::v1::{
@@ -1111,6 +1111,62 @@ where
         queue_name: &TaskQueueName,
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
     ) -> Result<Option<GetTaskQueueConfigResponse>>;
+
+    // Column-level permissions
+    async fn create_column_permission<'a>(
+        table_id: TableId,
+        request: CreateColumnPermissionRequest,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<ColumnPermission>;
+
+    async fn list_column_permissions<'a>(
+        table_id: TableId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<ColumnPermission>>;
+
+    async fn get_column_permission<'a>(
+        column_id: ColumnId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Option<ColumnPermission>>;
+
+    async fn delete_column_permission<'a>(
+        column_id: ColumnId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<()>;
+
+    // Row-level policies
+    async fn create_row_policy<'a>(
+        table_id: TableId,
+        request: CreateRowPolicyRequest,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<RowPolicy>;
+
+    async fn list_row_policies<'a>(
+        table_id: TableId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<RowPolicy>>;
+
+    async fn get_row_policy<'a>(
+        policy_id: RowPolicyId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Option<RowPolicy>>;
+
+    async fn update_row_policy<'a>(
+        policy_id: RowPolicyId,
+        request: CreateRowPolicyRequest,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<RowPolicy>;
+
+    async fn delete_row_policy<'a>(
+        policy_id: RowPolicyId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<()>;
+
+    async fn get_applicable_row_policies<'a>(
+        table_id: TableId,
+        user_id: &UserId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+    ) -> Result<Vec<RowPolicy>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1182,4 +1238,97 @@ pub struct DeletionDetails {
     pub expiration_date: chrono::DateTime<chrono::Utc>,
     pub deleted_at: chrono::DateTime<chrono::Utc>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+// Column-level permissions
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct ColumnPermission {
+    pub column_id: ColumnId,
+    pub table_id: TableId,
+    pub column_name: String,
+    pub column_type: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct CreateColumnPermissionRequest {
+    pub column_name: String,
+    pub column_type: String,
+    pub default_grants: Option<Vec<ColumnGrant>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct ColumnGrant {
+    pub grantee: Principal,
+    pub privilege: ColumnPrivilege,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ColumnPrivilege {
+    Select,
+    Modify,
+    Describe,
+}
+
+// Row-level policies
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct RowPolicy {
+    pub policy_id: RowPolicyId,
+    pub table_id: TableId,
+    pub policy_name: String,
+    pub filter_expression: String, // SQL WHERE clause
+    pub policy_type: RowPolicyType,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum RowPolicyType {
+    /// Allow access only to rows matching the filter
+    Restrictive,
+    /// Deny access to rows matching the filter  
+    Permissive,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct CreateRowPolicyRequest {
+    pub policy_name: String,
+    pub filter_expression: String,
+    pub policy_type: RowPolicyType,
+    pub default_grants: Option<Vec<RowPolicyGrant>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct RowPolicyGrant {
+    pub grantee: Principal,
+    pub privilege: RowPolicyPrivilege,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum RowPolicyPrivilege {
+    Select,
+    Modify,
+    Describe,
+}
+
+// Principal type for grants
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(tag = "type", content = "id", rename_all = "snake_case")]
+pub enum Principal {
+    User(UserId),
+    Role(RoleId),
 }

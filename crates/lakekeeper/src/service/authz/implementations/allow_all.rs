@@ -10,13 +10,15 @@ use crate::{
     service::{
         authn::UserId,
         authz::{
-            Authorizer, CatalogNamespaceAction, CatalogProjectAction, CatalogRoleAction,
-            CatalogServerAction, CatalogTableAction, CatalogUserAction, CatalogViewAction,
-            CatalogWarehouseAction, ListProjectsResponse, NamespaceParent,
+            Authorizer, CatalogColumnAction, CatalogNamespaceAction, CatalogProjectAction,
+            CatalogRoleAction, CatalogRowPolicyAction, CatalogServerAction, CatalogTableAction,
+            CatalogUserAction, CatalogViewAction, CatalogWarehouseAction, ListProjectsResponse,
+            NamespaceParent,
         },
+        catalog::RowPolicy,
         health::{Health, HealthExt},
-        Actor, Catalog, NamespaceId, ProjectId, RoleId, SecretStore, ServerId, State, TableId,
-        ViewId, WarehouseId,
+        Actor, Catalog, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, SecretStore,
+        ServerId, State, TableId, ViewId, WarehouseId,
     },
 };
 
@@ -259,6 +261,60 @@ impl Authorizer for AllowAllAuthorizer {
     }
 
     async fn delete_view(&self, _warehouse_id: WarehouseId, _view_id: ViewId) -> Result<()> {
+        Ok(())
+    }
+
+    // Column-level authorization methods
+    async fn is_allowed_column_action_impl(
+        &self,
+        _metadata: &RequestMetadata,
+        _column_id: ColumnId,
+        _action: CatalogColumnAction,
+    ) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn create_column_permission(
+        &self,
+        _metadata: &RequestMetadata,
+        _column_id: ColumnId,
+        _table_id: TableId,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn delete_column_permission(&self, _column_id: ColumnId) -> Result<()> {
+        Ok(())
+    }
+
+    // Row policy authorization methods
+    async fn is_allowed_row_policy_action_impl(
+        &self,
+        _metadata: &RequestMetadata,
+        _policy_id: RowPolicyId,
+        _action: CatalogRowPolicyAction,
+    ) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn get_applicable_row_policies(
+        &self,
+        _metadata: &RequestMetadata,
+        _table_id: TableId,
+    ) -> Result<Vec<RowPolicy>> {
+        Ok(vec![])
+    }
+
+    async fn create_row_policy(
+        &self,
+        _metadata: &RequestMetadata,
+        _policy_id: RowPolicyId,
+        _table_id: TableId,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn delete_row_policy(&self, _policy_id: RowPolicyId) -> Result<()> {
         Ok(())
     }
 }

@@ -6,7 +6,8 @@ use strum::EnumIter;
 use strum_macros::EnumString;
 
 use super::{
-    health::HealthExt, Actor, Catalog, NamespaceId, ProjectId, RoleId, SecretStore, State, TableId,
+    catalog::{RowPolicy},
+    health::HealthExt, Actor, Catalog, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, SecretStore, State, TableId,
     TabularDetails, ViewId, WarehouseId,
 };
 use crate::{api::iceberg::v1::Result, request_metadata::RequestMetadata, service::ServerId};
@@ -131,6 +132,25 @@ pub enum CatalogViewAction {
     CanUndrop,
     CanGetTasks,
     CanControlTasks,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, strum_macros::Display, EnumIter, EnumString)]
+#[strum(serialize_all = "snake_case")]
+pub enum CatalogColumnAction {
+    CanReadData,
+    CanWriteData,
+    CanGetMetadata,
+    CanIncludeInList,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, strum_macros::Display, EnumIter, EnumString)]
+#[strum(serialize_all = "snake_case")]
+pub enum CatalogRowPolicyAction {
+    CanReadData,
+    CanWriteData,
+    CanGetMetadata,
+    CanIncludeInList,
+    CanEvaluatePolicy,
 }
 
 pub trait TableUuid {
@@ -924,6 +944,125 @@ where
                 .into()),
         }
     }
+
+    // Column-level permissions
+    async fn is_allowed_column_action_impl(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        action: CatalogColumnAction,
+    ) -> Result<bool>;
+
+    async fn is_allowed_column_action(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        action: CatalogColumnAction,
+    ) -> Result<MustUse<bool>> {
+        if metadata.has_admin_privileges() {
+            Ok(true)
+        } else {
+            self.is_allowed_column_action_impl(metadata, column_id, action)
+                .await
+        }
+        .map(MustUse::from)
+    }
+
+    async fn require_column_action(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        action: CatalogColumnAction,
+    ) -> Result<()> {
+        if self
+            .is_allowed_column_action(metadata, column_id, action)
+            .await?
+            .into_inner()
+        {
+            Ok(())
+        } else {
+            Err(ErrorModel::forbidden(
+                format!("Forbidden action {action} on column {column_id}"),
+                "ColumnActionForbidden",
+                None,
+            )
+            .into())
+        }
+    }
+
+    /// Hook that is called when a new column permission is created.
+    async fn create_column_permission(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        table_id: TableId,
+    ) -> Result<()>;
+
+    /// Hook that is called when a column permission is deleted.
+    async fn delete_column_permission(&self, column_id: ColumnId) -> Result<()>;
+
+    // Row-level policies
+    async fn is_allowed_row_policy_action_impl(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        action: CatalogRowPolicyAction,
+    ) -> Result<bool>;
+
+    async fn is_allowed_row_policy_action(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        action: CatalogRowPolicyAction,
+    ) -> Result<MustUse<bool>> {
+        if metadata.has_admin_privileges() {
+            Ok(true)
+        } else {
+            self.is_allowed_row_policy_action_impl(metadata, policy_id, action)
+                .await
+        }
+        .map(MustUse::from)
+    }
+
+    async fn require_row_policy_action(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        action: CatalogRowPolicyAction,
+    ) -> Result<()> {
+        if self
+            .is_allowed_row_policy_action(metadata, policy_id, action)
+            .await?
+            .into_inner()
+        {
+            Ok(())
+        } else {
+            Err(ErrorModel::forbidden(
+                format!("Forbidden action {action} on row policy {policy_id}"),
+                "RowPolicyActionForbidden",
+                None,
+            )
+            .into())
+        }
+    }
+
+    /// Get applicable row policies for a table and user
+    async fn get_applicable_row_policies(
+        &self,
+        metadata: &RequestMetadata,
+        table_id: TableId,
+    ) -> Result<Vec<RowPolicy>>;
+
+    /// Hook that is called when a new row policy is created.
+    async fn create_row_policy(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        table_id: TableId,
+    ) -> Result<()>;
+
+    /// Hook that is called when a row policy is deleted.
+    async fn delete_row_policy(&self, policy_id: RowPolicyId) -> Result<()>;
 }
 
 #[cfg(test)]

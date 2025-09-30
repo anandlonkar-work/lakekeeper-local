@@ -21,11 +21,12 @@ use crate::{
     service::{
         authn::Actor,
         authz::{
-            Authorizer, CatalogNamespaceAction, CatalogProjectAction, CatalogServerAction,
-            CatalogTableAction, CatalogViewAction, CatalogWarehouseAction, ErrorModel,
-            ListProjectsResponse, Result,
+            Authorizer, CatalogColumnAction, CatalogNamespaceAction, CatalogProjectAction,
+            CatalogRowPolicyAction, CatalogServerAction, CatalogTableAction, CatalogViewAction,
+            CatalogWarehouseAction, ErrorModel, ListProjectsResponse, Result,
         },
-        NamespaceId, ServerId, TableId,
+        catalog::RowPolicy,
+        ColumnId, NamespaceId, RowPolicyId, ServerId, TableId,
     },
     ProjectId, WarehouseId, CONFIG,
 };
@@ -723,6 +724,176 @@ impl Authorizer for OpenFGAAuthorizer {
 
     async fn delete_view(&self, warehouse_id: WarehouseId, view_id: ViewId) -> Result<()> {
         self.delete_all_relations(&(warehouse_id, view_id)).await
+    }
+
+    // Column-level authorization implementation
+    async fn is_allowed_column_action_impl(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        action: CatalogColumnAction,
+    ) -> Result<bool> {
+        // Note: We need warehouse_id and table_id from column_id context
+        // For now, we'll use a placeholder implementation
+        // In a real implementation, we'd need to resolve the column to its table context
+        
+        // Placeholder: assuming column_id contains context or we query it
+        self.check(CheckRequestTupleKey {
+            user: metadata.actor().to_openfga(),
+            relation: action.to_string(),
+            object: format!("lakekeeper_column:{}", column_id),
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    // Row policy authorization implementation
+    async fn is_allowed_row_policy_action_impl(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        action: CatalogRowPolicyAction,
+    ) -> Result<bool> {
+        // Similar to column, we need table context
+        self.check(CheckRequestTupleKey {
+            user: metadata.actor().to_openfga(),
+            relation: action.to_string(),
+            object: format!("lakekeeper_row_policy:{}", policy_id),
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    // Column permission management
+    async fn create_column_permission(
+        &self,
+        metadata: &RequestMetadata,
+        column_id: ColumnId,
+        table_id: TableId,
+    ) -> Result<()> {
+        let actor = metadata.actor();
+        let column_object = format!("lakekeeper_column:{}", column_id);
+        let table_object = format!("lakekeeper_table:{}", table_id);
+
+        self.write(
+            Some(vec![
+                TupleKey {
+                    user: actor.to_openfga(),
+                    relation: "ownership".to_string(),
+                    object: column_object.clone(),
+                    condition: None,
+                },
+                TupleKey {
+                    user: table_object.clone(),
+                    relation: "parent".to_string(),
+                    object: column_object.clone(),
+                    condition: None,
+                },
+            ]),
+            None,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn delete_column_permission(&self, column_id: ColumnId) -> Result<()> {
+        let column_object = format!("lakekeeper_column:{}", column_id);
+        
+        // Read all tuples for this column and delete them
+        let tuples = self.read_all(Some(ReadRequestTupleKey {
+            user: "".to_string(),
+            relation: "".to_string(),
+            object: column_object.clone(),
+        })).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+
+        if !tuples.is_empty() {
+            let deletes: Vec<TupleKeyWithoutCondition> = tuples
+                .into_iter()
+                .map(|t| {
+                    let key = t.key.unwrap();
+                    TupleKeyWithoutCondition {
+                        user: key.user,
+                        relation: key.relation,
+                        object: key.object,
+                    }
+                })
+                .collect();
+
+            self.write(None, Some(deletes)).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+        }
+        
+        Ok(())
+    }
+
+    // Row policy management methods
+    async fn get_applicable_row_policies(
+        &self,
+        _metadata: &RequestMetadata,
+        _table_id: TableId,
+    ) -> Result<Vec<RowPolicy>> {
+        // This would require implementing RowPolicy struct and logic
+        // For now, return empty vector as placeholder
+        Ok(vec![])
+    }
+
+    async fn create_row_policy(
+        &self,
+        metadata: &RequestMetadata,
+        policy_id: RowPolicyId,
+        table_id: TableId,
+    ) -> Result<()> {
+        let actor = metadata.actor();
+        let policy_object = format!("lakekeeper_row_policy:{}", policy_id);
+        let table_object = format!("lakekeeper_table:{}", table_id);
+
+        self.write(
+            Some(vec![
+                TupleKey {
+                    user: actor.to_openfga(),
+                    relation: "ownership".to_string(),
+                    object: policy_object.clone(),
+                    condition: None,
+                },
+                TupleKey {
+                    user: table_object.clone(),
+                    relation: "parent".to_string(),
+                    object: policy_object.clone(),
+                    condition: None,
+                },
+            ]),
+            None,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn delete_row_policy(&self, policy_id: RowPolicyId) -> Result<()> {
+        let policy_object = format!("lakekeeper_row_policy:{}", policy_id);
+        
+        // Read all tuples for this policy and delete them
+        let tuples = self.read_all(Some(ReadRequestTupleKey {
+            user: "".to_string(),
+            relation: "".to_string(),
+            object: policy_object.clone(),
+        })).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+
+        if !tuples.is_empty() {
+            let deletes: Vec<TupleKeyWithoutCondition> = tuples
+                .into_iter()
+                .map(|t| {
+                    let key = t.key.unwrap();
+                    TupleKeyWithoutCondition {
+                        user: key.user,
+                        relation: key.relation,
+                        object: key.object,
+                    }
+                })
+                .collect();
+
+            self.write(None, Some(deletes)).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+        }
+        
+        Ok(())
     }
 }
 

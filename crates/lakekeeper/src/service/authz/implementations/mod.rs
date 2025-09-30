@@ -59,6 +59,10 @@ pub enum FgaType {
     Table,
     #[strum(serialize = "lakekeeper_view")]
     View,
+    #[strum(serialize = "lakekeeper_column")]
+    Column,
+    #[strum(serialize = "lakekeeper_row_policy")]
+    RowPolicy,
     ModelVersion,
     AuthModelId,
 }

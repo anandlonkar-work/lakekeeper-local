@@ -41,6 +41,8 @@ impl OpenFgaType for FgaType {
                 FgaType::Namespace,
                 FgaType::Table,
                 FgaType::View,
+                FgaType::Column,
+                FgaType::RowPolicy,
             ],
             FgaType::Project => &[FgaType::Server, FgaType::Warehouse],
             FgaType::Warehouse => &[FgaType::Project, FgaType::Namespace],
@@ -50,7 +52,8 @@ impl OpenFgaType for FgaType {
                 FgaType::Table,
                 FgaType::View,
             ],
-            FgaType::View | FgaType::Table => &[FgaType::Namespace],
+            FgaType::View | FgaType::Table => &[FgaType::Namespace, FgaType::Column, FgaType::RowPolicy],
+            FgaType::Column | FgaType::RowPolicy => &[FgaType::Table],
             FgaType::ModelVersion => &[],
             FgaType::AuthModelId => &[FgaType::ModelVersion],
         }

@@ -10,7 +10,7 @@ use crate::{
             openfga::{OpenFGAError, OpenFGAResult},
             FgaType,
         },
-        NamespaceId, RoleId, TableId, ViewId,
+        ColumnId, NamespaceId, RoleId, RowPolicyId, TableId, ViewId,
     },
     ProjectId, WarehouseId,
 };
@@ -242,6 +242,34 @@ impl OpenFgaEntity for (WarehouseId, ViewId) {
 
     fn openfga_type(&self) -> FgaType {
         FgaType::View
+    }
+}
+
+/// Adds warehouse and table context to the `OpenFga` entity for `column`.
+///
+/// Column ids can be reused across tables, so this context is required to ensure that `column`
+/// entities are unique.
+impl OpenFgaEntity for (WarehouseId, TableId, ColumnId) {
+    fn to_openfga(&self) -> String {
+        format!("{}:{}/{}/{}", self.openfga_type(), self.0, self.1, self.2)
+    }
+
+    fn openfga_type(&self) -> FgaType {
+        FgaType::Column
+    }
+}
+
+/// Adds warehouse and table context to the `OpenFga` entity for `row_policy`.
+///
+/// Row policy ids can be reused across tables, so this context is required to ensure that `row_policy`
+/// entities are unique.
+impl OpenFgaEntity for (WarehouseId, TableId, RowPolicyId) {
+    fn to_openfga(&self) -> String {
+        format!("{}:{}/{}/{}", self.openfga_type(), self.0, self.1, self.2)
+    }
+
+    fn openfga_type(&self) -> FgaType {
+        FgaType::RowPolicy
     }
 }
 
