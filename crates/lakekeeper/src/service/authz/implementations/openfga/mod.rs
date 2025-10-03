@@ -736,7 +736,7 @@ impl Authorizer for OpenFGAAuthorizer {
         // Note: We need warehouse_id and table_id from column_id context
         // For now, we'll use a placeholder implementation
         // In a real implementation, we'd need to resolve the column to its table context
-        
+
         // Placeholder: assuming column_id contains context or we query it
         self.check(CheckRequestTupleKey {
             user: metadata.actor().to_openfga(),
@@ -798,13 +798,18 @@ impl Authorizer for OpenFGAAuthorizer {
 
     async fn delete_column_permission(&self, column_id: ColumnId) -> Result<()> {
         let column_object = format!("lakekeeper_column:{}", column_id);
-        
+
         // Read all tuples for this column and delete them
-        let tuples = self.read_all(Some(ReadRequestTupleKey {
-            user: "".to_string(),
-            relation: "".to_string(),
-            object: column_object.clone(),
-        })).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+        let tuples = self
+            .read_all(Some(ReadRequestTupleKey {
+                user: "".to_string(),
+                relation: "".to_string(),
+                object: column_object.clone(),
+            }))
+            .await
+            .map_err(|e| {
+                crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None)
+            })?;
 
         if !tuples.is_empty() {
             let deletes: Vec<TupleKeyWithoutCondition> = tuples
@@ -819,9 +824,11 @@ impl Authorizer for OpenFGAAuthorizer {
                 })
                 .collect();
 
-            self.write(None, Some(deletes)).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+            self.write(None, Some(deletes)).await.map_err(|e| {
+                crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None)
+            })?;
         }
-        
+
         Ok(())
     }
 
@@ -869,13 +876,18 @@ impl Authorizer for OpenFGAAuthorizer {
 
     async fn delete_row_policy(&self, policy_id: RowPolicyId) -> Result<()> {
         let policy_object = format!("lakekeeper_row_policy:{}", policy_id);
-        
+
         // Read all tuples for this policy and delete them
-        let tuples = self.read_all(Some(ReadRequestTupleKey {
-            user: "".to_string(),
-            relation: "".to_string(),
-            object: policy_object.clone(),
-        })).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+        let tuples = self
+            .read_all(Some(ReadRequestTupleKey {
+                user: "".to_string(),
+                relation: "".to_string(),
+                object: policy_object.clone(),
+            }))
+            .await
+            .map_err(|e| {
+                crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None)
+            })?;
 
         if !tuples.is_empty() {
             let deletes: Vec<TupleKeyWithoutCondition> = tuples
@@ -890,9 +902,11 @@ impl Authorizer for OpenFGAAuthorizer {
                 })
                 .collect();
 
-            self.write(None, Some(deletes)).await.map_err(|e| crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None))?;
+            self.write(None, Some(deletes)).await.map_err(|e| {
+                crate::service::authz::ErrorModel::internal(e.to_string(), "OpenFGA", None)
+            })?;
         }
-        
+
         Ok(())
     }
 }

@@ -65,7 +65,6 @@ use crate::{
     request_metadata::RequestMetadata,
     service::{
         authn::UserId,
-
         storage::StorageProfile,
         task_queue::{
             Task, TaskAttemptId, TaskCheckState, TaskEntity, TaskFilter, TaskId, TaskInput,
@@ -848,15 +847,68 @@ impl Catalog for super::PostgresCatalog {
         _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<ColumnPermission> {
         // TODO: Implement column permission creation
-        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Column permissions not yet implemented", "ColumnPermission", None) })
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse {
+            error: ErrorModel::not_implemented(
+                "Column permissions not yet implemented",
+                "ColumnPermission",
+                None,
+            ),
+        })
     }
 
     async fn list_column_permissions<'a>(
-        _table_id: TableId,
-        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+        table_id: TableId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<Vec<ColumnPermission>> {
-        // TODO: Implement column permission listing
-        Ok(vec![])
+        #[derive(sqlx::FromRow)]
+        struct ColumnPermissionRow {
+            column_permission_id: sqlx::types::Uuid,
+            column_name: String,
+            column_type: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows = sqlx::query_as::<_, ColumnPermissionRow>(
+            r#"
+            SELECT 
+                cp.column_permission_id,
+                cp.column_name,
+                'string' as column_type,
+                cp.created_at,
+                cp.updated_at
+            FROM column_permissions cp
+            JOIN tabular t ON cp.warehouse_id = t.warehouse_id 
+                AND cp.namespace_name = t.namespace_name 
+                AND cp.table_name = t.name
+            WHERE t.tabular_id = $1
+                AND t.typ = 'table'
+                AND (cp.expires_at IS NULL OR cp.expires_at > now())
+            "#,
+        )
+        .bind(<TableId as Into<uuid::Uuid>>::into(table_id))
+        .fetch_all(transaction.as_mut())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to query column permissions: {:?}", e);
+            ErrorModel::internal(
+                "Failed to query column permissions",
+                "ColumnPermission",
+                Some(Box::new(e)),
+            )
+        })?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ColumnPermission {
+                column_id: ColumnId::from(row.column_permission_id),
+                table_id,
+                column_name: row.column_name,
+                column_type: row.column_type,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+            .collect())
     }
 
     async fn get_column_permission<'a>(
@@ -882,15 +934,78 @@ impl Catalog for super::PostgresCatalog {
         _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<RowPolicy> {
         // TODO: Implement row policy creation
-        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Row policies not yet implemented", "RowPolicy", None) })
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse {
+            error: ErrorModel::not_implemented(
+                "Row policies not yet implemented",
+                "RowPolicy",
+                None,
+            ),
+        })
     }
 
     async fn list_row_policies<'a>(
-        _table_id: TableId,
-        _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
+        table_id: TableId,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<Vec<RowPolicy>> {
-        // TODO: Implement row policy listing
-        Ok(vec![])
+        use crate::service::RowPolicyType;
+
+        #[derive(sqlx::FromRow)]
+        struct RowPolicyRow {
+            row_policy_id: sqlx::types::Uuid,
+            policy_name: String,
+            policy_expression: String,
+            policy_type: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows = sqlx::query_as::<_, RowPolicyRow>(
+            r#"
+            SELECT 
+                rp.row_policy_id,
+                rp.policy_name,
+                rp.policy_expression,
+                rp.policy_type,
+                rp.created_at,
+                rp.updated_at
+            FROM row_policies rp
+            JOIN tabular t ON rp.warehouse_id = t.warehouse_id 
+                AND rp.namespace_name = t.namespace_name 
+                AND rp.table_name = t.name
+            WHERE t.tabular_id = $1
+                AND t.typ = 'table'
+                AND rp.is_active = true
+                AND (rp.expires_at IS NULL OR rp.expires_at > now())
+            ORDER BY rp.priority DESC
+            "#,
+        )
+        .bind(<TableId as Into<uuid::Uuid>>::into(table_id))
+        .fetch_all(transaction.as_mut())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to query row policies: {:?}", e);
+            ErrorModel::internal(
+                "Failed to query row policies",
+                "RowPolicy",
+                Some(Box::new(e)),
+            )
+        })?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| RowPolicy {
+                policy_id: RowPolicyId::from(row.row_policy_id),
+                table_id,
+                policy_name: row.policy_name,
+                filter_expression: row.policy_expression,
+                policy_type: match row.policy_type.as_str() {
+                    "filter" | "allow" => RowPolicyType::Restrictive,
+                    _ => RowPolicyType::Permissive,
+                },
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+            .collect())
     }
 
     async fn get_row_policy<'a>(
@@ -907,7 +1022,13 @@ impl Catalog for super::PostgresCatalog {
         _transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<RowPolicy> {
         // TODO: Implement row policy update
-        Err(iceberg_ext::catalog::rest::IcebergErrorResponse { error: ErrorModel::not_implemented("Row policies not yet implemented", "RowPolicy", None) })
+        Err(iceberg_ext::catalog::rest::IcebergErrorResponse {
+            error: ErrorModel::not_implemented(
+                "Row policies not yet implemented",
+                "RowPolicy",
+                None,
+            ),
+        })
     }
 
     async fn delete_row_policy<'a>(

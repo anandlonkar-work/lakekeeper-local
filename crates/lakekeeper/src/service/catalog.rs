@@ -13,8 +13,8 @@ pub use iceberg_ext::catalog::rest::{CommitTableResponse, CreateTableRequest};
 use lakekeeper_io::Location;
 
 use super::{
-    storage::StorageProfile, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, TableId, TabularDetails, ViewId,
-    WarehouseId, WarehouseStatus,
+    storage::StorageProfile, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, TableId,
+    TabularDetails, ViewId, WarehouseId, WarehouseStatus,
 };
 pub use crate::api::iceberg::v1::{
     CreateNamespaceRequest, CreateNamespaceResponse, ListNamespacesQuery, NamespaceIdent, Result,

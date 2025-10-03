@@ -3,7 +3,8 @@ use std::{default::Default, env::VarError, sync::LazyLock};
 use lakekeeper::{
     axum,
     axum::{
-        http::{header, HeaderMap, StatusCode, Uri},
+        body::Body,
+        http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
         response::{IntoResponse, Response},
         routing::get,
         Router,
@@ -133,6 +134,179 @@ fn cache_item_to_response(item: CacheItem) -> Response {
     }
 }
 
+// FGAC API proxy handler that forwards requests to the real backend API
+pub(crate) async fn fgac_proxy_handler(
+    axum::extract::Path((warehouse_id, namespace_table)): axum::extract::Path<(String, String)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    use reqwest::Client;
+
+    // Extract namespace and table from the combined path parameter
+    // Expected format: "namespace.table" or "namespace₁ftable" (unicode separator)
+    let (namespace, table) = if let Some(dot_pos) = namespace_table.rfind('.') {
+        (&namespace_table[..dot_pos], &namespace_table[dot_pos + 1..])
+    } else if let Some(sep_pos) = namespace_table.find('\u{1f}') {
+        (&namespace_table[..sep_pos], &namespace_table[sep_pos + 1..])
+    } else {
+        // If no separator found, treat the whole thing as table name in default namespace
+        ("default", namespace_table.as_str())
+    };
+
+    // Build the backend API URL
+    // The real FGAC API is at: /management/v1/warehouse/{warehouse_id}/namespace/{namespace}/table/{table}/fgac/summary
+    let backend_url = format!(
+        "http://localhost:8181/management/v1/warehouse/{}/namespace/{}/table/{}/fgac/configuration",
+        warehouse_id, namespace, table
+    );
+
+    // Forward the request to the backend API with authentication headers
+    let client = Client::new();
+    let mut request_builder = client.get(&backend_url);
+
+    // Log all incoming headers for debugging
+    tracing::info!("FGAC proxy - Request received for: {}", backend_url);
+    tracing::info!("FGAC proxy - Incoming headers:");
+    for (name, value) in headers.iter() {
+        tracing::info!("  {}: {:?}", name, value);
+    }
+
+    // Forward ALL headers to backend (the backend will filter what it needs)
+    for (name, value) in headers.iter() {
+        // Skip host and connection headers as they're specific to the proxy connection
+        if name != header::HOST && name != header::CONNECTION {
+            request_builder = request_builder.header(name, value);
+        }
+    }
+
+    match request_builder.send().await {
+        Ok(response) => {
+            let status = response.status();
+
+            let mut headers_to_forward = HeaderMap::new();
+            if let Some(content_type) = response.headers().get(header::CONTENT_TYPE) {
+                headers_to_forward.insert(header::CONTENT_TYPE, content_type.clone());
+            }
+            if let Some(content_encoding) = response.headers().get(header::CONTENT_ENCODING) {
+                headers_to_forward.insert(header::CONTENT_ENCODING, content_encoding.clone());
+            }
+            if let Some(cache_control) = response.headers().get(header::CACHE_CONTROL) {
+                headers_to_forward.insert(header::CACHE_CONTROL, cache_control.clone());
+            }
+            if let Some(pragma) = response.headers().get(header::PRAGMA) {
+                headers_to_forward.insert(header::PRAGMA, pragma.clone());
+            }
+
+            match response.bytes().await {
+                Ok(body_bytes) => {
+                    let preview_len = body_bytes.len().min(128);
+                    let preview = String::from_utf8_lossy(&body_bytes[..preview_len]);
+                    tracing::info!(
+                        "FGAC proxy - Upstream status: {}, body preview: {}",
+                        status,
+                        preview
+                    );
+
+                    let mut proxy_response = Response::new(Body::from(body_bytes));
+                    *proxy_response.status_mut() = status;
+
+                    let headers_mut = proxy_response.headers_mut();
+                    for (key, value) in headers_to_forward.iter() {
+                        headers_mut.insert(key.clone(), value.clone());
+                    }
+                    if !headers_mut.contains_key(header::CONTENT_TYPE) {
+                        headers_mut.insert(
+                            header::CONTENT_TYPE,
+                            HeaderValue::from_static("application/json"),
+                        );
+                    }
+
+                    proxy_response
+                }
+                Err(e) => {
+                    tracing::error!("Failed to read FGAC API response: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        [(header::CONTENT_TYPE, "application/json")],
+                        r#"{"error": "Failed to read API response"}"#.to_string(),
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to call FGAC API: {}", e);
+            (
+                StatusCode::BAD_GATEWAY,
+                [(header::CONTENT_TYPE, "application/json")],
+                format!(r#"{{"error": "Failed to connect to FGAC API: {}"}}"#, e),
+            )
+                .into_response()
+        }
+    }
+}
+
+// Warehouses API proxy handler
+pub(crate) async fn warehouses_proxy_handler(headers: HeaderMap) -> impl IntoResponse {
+    let mock_response = r#"{{
+        "warehouses": [
+            {{
+                "warehouse_id": "demo",
+                "warehouse_name": "demo (created via notebooks)",
+                "status": "active"
+            }},
+            {{
+                "warehouse_id": "example",
+                "warehouse_name": "example (demo data)",
+                "status": "active"
+            }}
+        ]
+    }}"#;
+
+    ([(header::CONTENT_TYPE, "application/json")], mock_response)
+}
+
+// Schemas API proxy handler
+pub(crate) async fn schemas_proxy_handler(
+    axum::extract::Path(warehouse_id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let mock_response = r#"{{
+        "namespaces": [
+            "sales", 
+            "marketing", 
+            "finance", 
+            "hr",
+            "inventory",
+            "crm"
+        ]
+    }}"#;
+
+    ([(header::CONTENT_TYPE, "application/json")], mock_response)
+}
+
+// Tables API proxy handler
+pub(crate) async fn tables_proxy_handler(
+    axum::extract::Path((warehouse_id, schema_name)): axum::extract::Path<(String, String)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let mock_response = format!(
+        r#"{{
+        "identifiers": [
+            {{ "namespace": "{}", "name": "customers" }},
+            {{ "namespace": "{}", "name": "orders" }},
+            {{ "namespace": "{}", "name": "products" }},
+            {{ "namespace": "{}", "name": "employees" }}
+        ]
+    }}"#,
+        schema_name, schema_name, schema_name, schema_name
+    );
+
+    ([(header::CONTENT_TYPE, "application/json")], mock_response)
+}
+
+// Note: FGAC tab is integrated into the Vue.js SPA (not a separate server-rendered page)
+// The Vue.js application uses the API endpoints below to fetch FGAC data
+
 pub(crate) fn get_ui_router() -> Router {
     Router::new()
         .route("/ui", get(redirect_to_ui))
@@ -141,6 +315,19 @@ pub(crate) fn get_ui_router() -> Router {
         .route("/ui/", get(index_handler))
         .route("/ui/favicon.ico", get(favicon_handler))
         .route("/ui/assets/{*file}", get(static_handler))
+        // FGAC API endpoints (used by Vue.js SPA)
+        // Format: /ui/api/fgac/{warehouse_id}/{namespace.table}
+        .route(
+            "/ui/api/fgac/{warehouse_id}/{namespace_table}",
+            get(fgac_proxy_handler),
+        )
+        .route("/ui/api/warehouses", get(warehouses_proxy_handler))
+        .route("/ui/api/schemas/{warehouse_id}", get(schemas_proxy_handler))
+        .route(
+            "/ui/api/tables/{warehouse_id}/{schema_name}",
+            get(tables_proxy_handler),
+        )
+        // Catch-all route must be last
         .route("/ui/{*file}", get(index_handler))
         .layer(
             tower::ServiceBuilder::new()

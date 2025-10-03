@@ -2,63 +2,70 @@ package trino
 
 import data.trino
 import data.configuration
-import future.keywords.if
-import future.keywords.in
+import rego.v1
 
 # Column masking for fine-grained access control
 # This endpoint is called by Trino when opa.policy.column-masking-uri is configured
+# It queries Lakekeeper's PostgreSQL database for column masks instead of hardcoded rules
 
-# Extract user information
+# Extract user and column information
 user_id := input.context.identity.user
-username := get_username(user_id)
-
-# Get username from user_id (UUID mapping from OPA logs)
-get_username(user_id) := "peter" if {
-    user_id == "cfb55bf6-fcbb-4a1e-bfec-30c6649b52f8"  # Peter's actual UUID from logs
-}
-
-get_username(user_id) := "anna" if {
-    user_id == "d223d88c-85b6-4859-b5c5-27f3825e47f6"  # Anna's UUID from previous logs
-}
-
-# Default to treating unknown users as restricted
-get_username(user_id) := "unknown" if {
-    user_id != "cfb55bf6-fcbb-4a1e-bfec-30c6649b52f8"
-    user_id != "d223d88c-85b6-4859-b5c5-27f3825e47f6"
-}
-
-# Column masking rules
 column_resource := input.action.resource.column
 
-# Don't apply column masking for admin users (Peter) - they need full access
-# Only mask sensitive columns for Anna (and unknown users)
-columnMask := {"expression": "NULL"} if {
-    username in ["anna", "unknown"]
-    username != "peter"  # Explicitly exclude Peter from masking
-    column_resource.catalogName == "lakekeeper"
-    column_resource.schemaName == "fgac_test"
-    column_resource.tableName == "employees"
-    column_resource.columnName in ["salary", "email", "phone"]
+# Get warehouse name from catalog mapping (configured in configuration.rego)
+warehouse_name := data.configuration.catalog_to_warehouse[column_resource.catalogName]
+
+# Fetch column masks from Lakekeeper's PostgreSQL database
+get_column_masks(user_id, warehouse, namespace, table) := masks if {
+    # Construct URL for Lakekeeper's internal OPA API
+    url := sprintf("http://lakekeeper:8181/internal/opa/v1/column-masks?user_id=%s&warehouse=%s&namespace=%s&table=%s", 
+                   [user_id, warehouse, namespace, table])
+    
+    # Make HTTP call to Lakekeeper
+    response := http.send({
+        "method": "GET",
+        "url": url,
+        "headers": {"Content-Type": "application/json"},
+        "raise_error": false,
+        "timeout": "5s"
+    })
+    
+    # Check if request was successful
+    response.status_code == 200
+    
+    # Extract column_masks from response
+    masks := response.body.column_masks
 }
 
-# Partially mask email for demonstration (show domain only)
-columnMask := {"expression": "substring(email, position('@', email))"} if {
-    username in ["anna", "unknown"]
-    column_resource.catalogName == "lakekeeper"
-    column_resource.schemaName == "fgac_test"
-    column_resource.tableName == "employees"
-    column_resource.columnName == "email_partial"  # Example of partial masking
+# Apply column masking based on database policies
+columnMask := {"expression": mask.expression} if {
+    # Only proceed if we have a warehouse mapping for this catalog
+    warehouse_name
+    
+    # Fetch masks from database
+    masks := get_column_masks(
+        user_id,
+        warehouse_name,
+        column_resource.schemaName,
+        column_resource.tableName
+    )
+    
+    # Get mask for the specific column being accessed
+    mask := masks[column_resource.columnName]
 }
 
-# Allow full access for Peter (admin) - no mask needed
-# When no columnMask is returned, Trino shows the column as-is
+# Fallback: If Lakekeeper is unreachable or returns error, apply safe defaults
+# This ensures query continues but with maximum restrictions
+default columnMask := null
 
 # Debug logging
 debug_info := {
     "user_id": user_id,
-    "username": username,
+    "warehouse": warehouse_name,
     "catalog": column_resource.catalogName,
     "schema": column_resource.schemaName,
     "table": column_resource.tableName,
-    "column": column_resource.columnName
+    "column": column_resource.columnName,
+    "lakekeeper_url": sprintf("http://lakekeeper:8181/internal/opa/v1/column-masks?user_id=%s&warehouse=%s&namespace=%s&table=%s", 
+                              [user_id, warehouse_name, column_resource.schemaName, column_resource.tableName])
 }

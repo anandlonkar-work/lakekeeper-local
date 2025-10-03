@@ -2,69 +2,71 @@ package trino
 
 import data.trino
 import data.configuration
-import future.keywords.if
-import future.keywords.in
-import future.keywords.contains
+import rego.v1
 
 # Row filtering for fine-grained access control
 # This endpoint is called by Trino when opa.policy.row-filters-uri is configured
+# It queries Lakekeeper's PostgreSQL database for row filters instead of hardcoded rules
 
-# Extract user information
+# Extract user and table information
 user_id := input.context.identity.user
-username := get_username(user_id)
-
-# Get username from user_id (UUID mapping from OPA logs)
-get_username(user_id) := "peter" if {
-    user_id == "cfb55bf6-fcbb-4a1e-bfec-30c6649b52f8"  # Peter's actual UUID from logs
-}
-
-get_username(user_id) := "anna" if {
-    user_id == "d223d88c-85b6-4859-b5c5-27f3825e47f6"  # Anna's UUID from previous logs
-}
-
-# Default to treating unknown users as restricted
-get_username(user_id) := "unknown" if {
-    user_id != "cfb55bf6-fcbb-4a1e-bfec-30c6649b52f8"
-    user_id != "d223d88c-85b6-4859-b5c5-27f3825e47f6"
-}
-
-# Row filtering rules
 table_resource := input.action.resource.table
 
-# Filter rows for Anna (and unknown users) - only show Public and Internal classifications
-# and exclude Executive department
-rowFilters contains {"expression": "classification IN ('Public', 'Internal')"} if {
-    username in ["anna", "unknown"]
-    table_resource.catalogName == "lakekeeper"
-    table_resource.schemaName == "fgac_test"
-    table_resource.tableName == "employees"
+# Get warehouse name from catalog mapping (configured in configuration.rego)
+warehouse_name := data.configuration.catalog_to_warehouse[table_resource.catalogName]
+
+# Fetch row filters from Lakekeeper's PostgreSQL database
+get_row_filters(user_id, warehouse, namespace, table) := filters if {
+    # Construct URL for Lakekeeper's internal OPA API
+    url := sprintf("http://lakekeeper:8181/internal/opa/v1/row-filters?user_id=%s&warehouse=%s&namespace=%s&table=%s", 
+                   [user_id, warehouse, namespace, table])
+    
+    # Make HTTP call to Lakekeeper
+    response := http.send({
+        "method": "GET",
+        "url": url,
+        "headers": {"Content-Type": "application/json"},
+        "raise_error": false,
+        "timeout": "5s"
+    })
+    
+    # Check if request was successful
+    response.status_code == 200
+    
+    # Extract row_filters from response
+    filters := response.body.row_filters
 }
 
-rowFilters contains {"expression": "department != 'Executive'"} if {
-    username in ["anna", "unknown"]
-    table_resource.catalogName == "lakekeeper"
-    table_resource.schemaName == "fgac_test"
-    table_resource.tableName == "employees"
+# Apply row filtering based on database policies
+rowFilters contains {"expression": filter.expression} if {
+    # Only proceed if we have a warehouse mapping for this catalog
+    warehouse_name
+    
+    # Fetch filters from database
+    filters := get_row_filters(
+        user_id,
+        warehouse_name,
+        table_resource.schemaName,
+        table_resource.tableName
+    )
+    
+    # Iterate through all filters and apply them
+    # Filters are already sorted by priority (descending) in the database query
+    filter := filters[_]
 }
 
-# Additional row filter: Anna can only see employees from her own department
-# (This assumes Anna is in 'Engineering' department)
-rowFilters contains {"expression": "department = 'Engineering'"} if {
-    username in ["anna"]
-    table_resource.catalogName == "lakekeeper"
-    table_resource.schemaName == "fgac_test"
-    table_resource.tableName == "employees"
-}
-
-# Peter (admin) gets no row filters - sees all data
-# When no rowFilters are returned, Trino shows all rows
+# Fallback: If Lakekeeper is unreachable or returns error, apply safe defaults
+# Empty rowFilters means no restrictions (allow all rows)
+default rowFilters := set()
 
 # Debug logging
 debug_info := {
     "user_id": user_id,
-    "username": username,
+    "warehouse": warehouse_name,
     "catalog": table_resource.catalogName,
     "schema": table_resource.schemaName,
     "table": table_resource.tableName,
-    "filters_applied": count(rowFilters)
+    "filters_applied": count(rowFilters),
+    "lakekeeper_url": sprintf("http://lakekeeper:8181/internal/opa/v1/row-filters?user_id=%s&warehouse=%s&namespace=%s&table=%s", 
+                              [user_id, warehouse_name, table_resource.schemaName, table_resource.tableName])
 }

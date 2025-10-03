@@ -5,6 +5,7 @@ pub mod contract_verification;
 pub mod endpoint_hooks;
 pub mod endpoint_statistics;
 pub mod event_publisher;
+
 pub mod health;
 pub mod secrets;
 pub mod storage;
@@ -21,9 +22,9 @@ pub use catalog::{
     GetNamespaceResponse, GetProjectResponse, GetStorageConfigResponse, GetTableMetadataResponse,
     GetWarehouseResponse, ListFlags, ListNamespacesQuery, ListNamespacesResponse,
     LoadTableResponse, NamespaceDropInfo, NamespaceIdent, NamespaceInfo, Result, RowPolicy,
-    ServerInfo, TableCommit, TableCreation, TableIdent, TableInfo, TabularInfo, Transaction,
-    UndropTabularResponse, UpdateNamespacePropertiesRequest, UpdateNamespacePropertiesResponse,
-    ViewCommit, ViewMetadataWithLocation,
+    RowPolicyType, ServerInfo, TableCommit, TableCreation, TableIdent, TableInfo, TabularInfo,
+    Transaction, UndropTabularResponse, UpdateNamespacePropertiesRequest,
+    UpdateNamespacePropertiesResponse, ViewCommit, ViewMetadataWithLocation,
 };
 pub use endpoint_statistics::EndpointStatisticsTrackerTx;
 use http::StatusCode;
@@ -131,18 +132,21 @@ pub struct TableId(uuid::Uuid);
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(transparent)]
 pub struct WarehouseId(pub(crate) uuid::Uuid);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(transparent)]
 pub struct ColumnId(uuid::Uuid);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(feature = "sqlx", sqlx(transparent))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(transparent)]
 pub struct RowPolicyId(uuid::Uuid);
 

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table FGAC Management</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .table-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            border-left: 4px solid #007acc;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section h2 {
+            color: #555;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .permissions-grid {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .permission-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            background: #fafafa;
+        }
+        
+        .permission-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .permission-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-primary {
+            background: #007acc;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #005c99;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .add-permission {
+            background: #e9ecef;
+            border: 2px dashed #6c757d;
+            padding: 20px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .add-permission:hover {
+            background: #dee2e6;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fine-Grained Access Control</h1>
+        
+        <div class="table-info">
+            <strong>Table:</strong> <span id="table-name">Loading...</span><br>
+            <strong>Warehouse:</strong> <span id="warehouse-name">Loading...</span>
+        </div>
+        
+        <div id="loading" class="loading">
+            Loading FGAC settings...
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="success" class="success" style="display: none;"></div>
+        
+        <div id="content" style="display: none;">
+            <div class="section">
+                <h2>Column Permissions</h2>
+                <div id="column-permissions" class="permissions-grid">
+                    <!-- Column permissions will be loaded here -->
+                </div>
+                <div class="add-permission" onclick="addColumnPermission()">
+                    + Add Column Permission
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Row Policies</h2>
+                <div id="row-policies" class="permissions-grid">
+                    <!-- Row policies will be loaded here -->
+                </div>
+                <div class="add-permission" onclick="addRowPolicy()">
+                    + Add Row Policy
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Extract warehouse_id and table_id from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const warehouseId = urlParams.get('warehouse_id');
+        const tableId = urlParams.get('table_id');
+        
+        let currentFgacData = null;
+        
+        // Load FGAC data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!warehouseId || !tableId) {
+                showError('Missing warehouse_id or table_id in URL parameters');
+                return;
+            }
+            
+            loadFgacData();
+        });
+        
+        async function loadFgacData() {
+            try {
+                const response = await fetch(`/management/v1/warehouse/${warehouseId}/table/${tableId}/fgac`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load FGAC data: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                currentFgacData = data;
+                displayFgacData(data);
+                
+            } catch (error) {
+                console.error('Error loading FGAC data:', error);
+                showError(`Error loading FGAC data: ${error.message}`);
+            }
+        }
+        
+        function displayFgacData(data) {
+            // Update table info
+            document.getElementById('table-name').textContent = data.table_name || 'Unknown';
+            document.getElementById('warehouse-name').textContent = data.warehouse_name || 'Unknown';
+            
+            // Display column permissions
+            const columnContainer = document.getElementById('column-permissions');
+            columnContainer.innerHTML = '';
+            
+            data.column_permissions.forEach((perm, index) => {
+                const card = createColumnPermissionCard(perm, index);
+                columnContainer.appendChild(card);
+            });
+            
+            // Display row policies
+            const rowContainer = document.getElementById('row-policies');
+            rowContainer.innerHTML = '';
+            
+            data.row_policies.forEach((policy, index) => {
+                const card = createRowPolicyCard(policy, index);
+                rowContainer.appendChild(card);
+            });
+            
+            // Hide loading, show content
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+        }
+        
+        function createColumnPermissionCard(perm, index) {
+            const card = document.createElement('div');
+            card.className = 'permission-card';
+            card.innerHTML = `
+                <h3>Column: ${perm.column_name}</h3>
+                <p><strong>Principal:</strong> ${perm.principal_type}:${perm.principal_name}</p>
+                <p><strong>Permission:</strong> ${perm.permission}</p>
+                <div class="permission-actions">
+                    <button class="btn btn-primary" onclick="editColumnPermission(${index})">Edit</button>
+                    <button class="btn btn-danger" onclick="removeColumnPermission(${index})">Remove</button>
+                </div>
+            `;
+            return card;
+        }
+        
+        function createRowPolicyCard(policy, index) {
+            const card = document.createElement('div');
+            card.className = 'permission-card';
+            card.innerHTML = `
+                <h3>Policy: ${policy.policy_name}</h3>
+                <p><strong>Principal:</strong> ${policy.principal_type}:${policy.principal_name}</p>
+                <p><strong>Filter:</strong> ${policy.filter_expression}</p>
+                <div class="permission-actions">
+                    <button class="btn btn-primary" onclick="editRowPolicy(${index})">Edit</button>
+                    <button class="btn btn-danger" onclick="removeRowPolicy(${index})">Remove</button>
+                </div>
+            `;
+            return card;
+        }
+        
+        async function saveFgacData() {
+            try {
+                const response = await fetch(`/management/v1/warehouse/${warehouseId}/table/${tableId}/fgac`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(currentFgacData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to save FGAC data: ${response.statusText}`);
+                }
+                
+                showSuccess('FGAC settings saved successfully');
+                
+            } catch (error) {
+                console.error('Error saving FGAC data:', error);
+                showError(`Error saving FGAC data: ${error.message}`);
+            }
+        }
+        
+        function addColumnPermission() {
+            const columnName = prompt('Enter column name:');
+            const principalType = prompt('Enter principal type (user/role):');
+            const principalName = prompt('Enter principal name:');
+            const permission = prompt('Enter permission (read/write):');
+            
+            if (columnName && principalType && principalName && permission) {
+                currentFgacData.column_permissions.push({
+                    column_name: columnName,
+                    principal_type: principalType,
+                    principal_name: principalName,
+                    permission: permission
+                });
+                
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function addRowPolicy() {
+            const policyName = prompt('Enter policy name:');
+            const principalType = prompt('Enter principal type (user/role):');
+            const principalName = prompt('Enter principal name:');
+            const filterExpression = prompt('Enter filter expression:');
+            
+            if (policyName && principalType && principalName && filterExpression) {
+                currentFgacData.row_policies.push({
+                    policy_name: policyName,
+                    principal_type: principalType,
+                    principal_name: principalName,
+                    filter_expression: filterExpression
+                });
+                
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function removeColumnPermission(index) {
+            if (confirm('Are you sure you want to remove this column permission?')) {
+                currentFgacData.column_permissions.splice(index, 1);
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function removeRowPolicy(index) {
+            if (confirm('Are you sure you want to remove this row policy?')) {
+                currentFgacData.row_policies.splice(index, 1);
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function editColumnPermission(index) {
+            const perm = currentFgacData.column_permissions[index];
+            const newColumnName = prompt('Column name:', perm.column_name);
+            const newPrincipalType = prompt('Principal type:', perm.principal_type);
+            const newPrincipalName = prompt('Principal name:', perm.principal_name);
+            const newPermission = prompt('Permission:', perm.permission);
+            
+            if (newColumnName !== null && newPrincipalType !== null && 
+                newPrincipalName !== null && newPermission !== null) {
+                currentFgacData.column_permissions[index] = {
+                    column_name: newColumnName,
+                    principal_type: newPrincipalType,
+                    principal_name: newPrincipalName,
+                    permission: newPermission
+                };
+                
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function editRowPolicy(index) {
+            const policy = currentFgacData.row_policies[index];
+            const newPolicyName = prompt('Policy name:', policy.policy_name);
+            const newPrincipalType = prompt('Principal type:', policy.principal_type);
+            const newPrincipalName = prompt('Principal name:', policy.principal_name);
+            const newFilterExpression = prompt('Filter expression:', policy.filter_expression);
+            
+            if (newPolicyName !== null && newPrincipalType !== null && 
+                newPrincipalName !== null && newFilterExpression !== null) {
+                currentFgacData.row_policies[index] = {
+                    policy_name: newPolicyName,
+                    principal_type: newPrincipalType,
+                    principal_name: newPrincipalName,
+                    filter_expression: newFilterExpression
+                };
+                
+                displayFgacData(currentFgacData);
+                saveFgacData();
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('success').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function showSuccess(message) {
+            document.getElementById('success').textContent = message;
+            document.getElementById('success').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

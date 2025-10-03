@@ -1,0 +1,7 @@
+services:
+  lakekeeper:
+    image: lakekeeper-fgac:enhanced
+    pull_policy: never
+  migrate:
+    image: lakekeeper-fgac:enhanced
+    pull_policy: never

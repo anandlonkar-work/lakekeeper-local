@@ -153,7 +153,7 @@ pub struct ServeConfiguration<
 /// - If the service cannot bind to the specified address.
 /// - If the terms of service have not been accepted during bootstrap.
 #[allow(clippy::too_many_lines)]
-pub async fn serve<C: Catalog, S: SecretStore, A: Authorizer, N: Authenticator + 'static>(
+pub async fn serve<C: Catalog, S: SecretStore + Clone, A: Authorizer, N: Authenticator + 'static>(
     config: ServeConfiguration<C, S, A, N>,
 ) -> anyhow::Result<()> {
     let cancellation_token = CancellationToken::new();
@@ -386,7 +386,7 @@ async fn serve_inner<
     }
 
     // Router
-    let mut router = new_full_router::<C, _, _, _>(RouterArgs {
+    let mut router = new_full_router::<C, A, S, N>(RouterArgs {
         authenticator: authenticator.clone(),
         state: state.clone(),
         service_health_provider: health_provider.clone(),

@@ -1,0 +1,214 @@
+# Simplified single-container setup for testing FGAC UI
+# This brings up just the lakekeeper service with its dependencies
+#
+# Usage:
+#   docker-compose -f examples/access-control-fgac/docker-compose-test.yaml up -d
+#   Access UI at: http://localhost:8181/ui
+#
+# To rebuild lakekeeper image:
+#   docker-compose -f examples/access-control-fgac/docker-compose-build.yaml build
+
+services:
+  lakekeeper:
+    image: ${LAKEKEEPER_FGAC_IMAGE:-access-control-fgac-lakekeeper:latest}
+    pull_policy: never
+    environment:
+      # Database
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=test-encryption-key-not-secure
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@db:5432/postgres
+      
+      # Authorization (OpenFGA)
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      
+      # Authentication (Keycloak OIDC)
+      - LAKEKEEPER__OPENID_PROVIDER_URI=http://keycloak:8080/realms/iceberg
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS=http://localhost:30080/realms/iceberg
+      - LAKEKEEPER__OPENID_AUDIENCE=lakekeeper
+      
+      # UI Configuration
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID=lakekeeper
+      - LAKEKEEPER__UI__OPENID_PROVIDER_URI=http://localhost:30080/realms/iceberg
+      
+      # Logging
+      - RUST_LOG=info,lakekeeper=debug
+    command: ["serve"]
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 2s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    networks:
+      - test_net
+
+  migrate:
+    image: ${LAKEKEEPER_FGAC_IMAGE:-access-control-fgac-lakekeeper:latest}
+    pull_policy: never
+    environment:
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=test-encryption-key-not-secure
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@db:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      - RUST_LOG=info
+    restart: "no"
+    entrypoint: ["/home/nonroot/lakekeeper", "migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    networks:
+      - test_net
+
+  # PostgreSQL for Lakekeeper
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - test_net
+
+  # PostgreSQL for OpenFGA
+  openfga-db:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - openfga_data:/var/lib/postgresql/data
+    networks:
+      - test_net
+
+  # MinIO for object storage
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    environment:
+      - MINIO_ROOT_USER=minio-root-user
+      - MINIO_ROOT_PASSWORD=minio-root-password
+    command: ["server", "--console-address", ":9001", "/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9090:9000"
+      - "9001:9001"
+    networks:
+      - test_net
+
+  createbuckets:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: on-failure
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      /usr/bin/mc alias set minio http://minio:9000 minio-root-user minio-root-password;
+      /usr/bin/mc mb minio/examples || true;
+      /usr/bin/mc mb minio/warehouse || true;
+      exit 0;
+      "
+    networks:
+      - test_net
+
+  # Keycloak for authentication
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json
+    healthcheck:
+      test: ["CMD-SHELL", 'exec 3<>/dev/tcp/127.0.0.1/8080;echo -e "GET /health/ready HTTP/1.1\r\nhost: 127.0.0.1:8080\r\nConnection: close\r\n\r\n" >&3;grep "200 OK"  <&3']
+      interval: 3s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    ports:
+      - "30080:8080"
+    command: ["start-dev", "--import-realm", "--log-level=INFO"]
+    networks:
+      - test_net
+
+  # OpenFGA for authorization
+  openfga-migrate:
+    image: openfga/openfga:v1.8
+    command: migrate
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:postgres@openfga-db:5432/postgres?sslmode=disable
+    depends_on:
+      openfga-db:
+        condition: service_healthy
+    networks:
+      - test_net
+
+  openfga:
+    image: openfga/openfga:v1.8
+    command: run
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:postgres@openfga-db:5432/postgres?sslmode=disable
+      - OPENFGA_DATASTORE_MAX_OPEN_CONNS=50
+      - OPENFGA_PLAYGROUND_ENABLED=false
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      openfga-db:
+        condition: service_healthy
+      openfga-migrate:
+        condition: service_completed_successfully
+    networks:
+      - test_net
+
+networks:
+  test_net:
+    driver: bridge
+
+volumes:
+  db_data:
+  openfga_data:
+  minio_data:

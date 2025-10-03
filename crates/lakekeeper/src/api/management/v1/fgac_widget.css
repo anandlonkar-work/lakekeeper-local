@@ -1,0 +1,303 @@
+/* FGAC Widget Styles */
+.fgac-widget {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e1e5e9;
+}
+
+.fgac-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.fgac-loading .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e1e5e9;
+    border-top: 2px solid #007acc;
+    border-radius: 50%;
+    animation: fgac-spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes fgac-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.fgac-section {
+    margin-bottom: 30px;
+}
+
+.fgac-section:last-child {
+    margin-bottom: 0;
+}
+
+.fgac-section h3 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #24292f;
+    border-bottom: 1px solid #e1e5e9;
+    padding-bottom: 8px;
+}
+
+.fgac-permissions-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.fgac-permission-card {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 16px;
+    transition: border-color 0.2s;
+}
+
+.fgac-permission-card:hover {
+    border-color: #b1bac4;
+}
+
+.fgac-permission-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.fgac-column-name,
+.fgac-policy-name {
+    font-weight: 600;
+    color: #24292f;
+    font-size: 14px;
+}
+
+.fgac-permission-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.fgac-edit-btn,
+.fgac-remove-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+}
+
+.fgac-edit-btn {
+    color: #0969da;
+}
+
+.fgac-edit-btn:hover {
+    background: #0969da;
+    color: white;
+    border-color: #0969da;
+}
+
+.fgac-remove-btn {
+    color: #cf222e;
+}
+
+.fgac-remove-btn:hover {
+    background: #cf222e;
+    color: white;
+    border-color: #cf222e;
+}
+
+.fgac-permission-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #656d76;
+}
+
+.fgac-permission-details span {
+    display: block;
+}
+
+.fgac-empty {
+    padding: 20px;
+    text-align: center;
+    color: #656d76;
+    font-style: italic;
+    background: #f6f8fa;
+    border: 1px dashed #d0d7de;
+    border-radius: 6px;
+}
+
+.fgac-add-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #24292f;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.fgac-add-btn:hover {
+    background: #e5e5e5;
+    border-color: #b1bac4;
+}
+
+.fgac-actions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e1e5e9;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.fgac-save-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    background: #2da44e;
+    border: 1px solid #2da44e;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fgac-save-btn:hover {
+    background: #2c974b;
+    border-color: #2c974b;
+}
+
+.fgac-message {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.fgac-message-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+.fgac-message-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.fgac-message-info {
+    background: #e0f2fe;
+    color: #0c4a6e;
+    border: 1px solid #7dd3fc;
+}
+
+.fgac-error {
+    padding: 20px;
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .fgac-permission-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .fgac-permission-actions {
+        align-self: flex-end;
+    }
+}
+
+/* Integration with existing console styles */
+.fgac-widget .fgac-section h3 {
+    /* Match existing heading styles if available */
+    font-family: inherit;
+}
+
+.fgac-widget button {
+    /* Inherit font family from parent */
+    font-family: inherit;
+}
+
+/* Dark mode support (if console supports it) */
+@media (prefers-color-scheme: dark) {
+    .fgac-widget {
+        background: #0d1117;
+        border-color: #30363d;
+        color: #e6edf3;
+    }
+    
+    .fgac-section h3 {
+        color: #e6edf3;
+        border-color: #30363d;
+    }
+    
+    .fgac-permission-card {
+        background: #161b22;
+        border-color: #30363d;
+    }
+    
+    .fgac-permission-card:hover {
+        border-color: #484f58;
+    }
+    
+    .fgac-column-name,
+    .fgac-policy-name {
+        color: #e6edf3;
+    }
+    
+    .fgac-permission-details {
+        color: #7d8590;
+    }
+    
+    .fgac-empty {
+        background: #161b22;
+        border-color: #30363d;
+        color: #7d8590;
+    }
+    
+    .fgac-add-btn {
+        background: #21262d;
+        border-color: #30363d;
+        color: #e6edf3;
+    }
+    
+    .fgac-add-btn:hover {
+        background: #30363d;
+        border-color: #484f58;
+    }
+    
+    .fgac-actions {
+        border-color: #30363d;
+    }
+    
+    .fgac-error {
+        background: #161b22;
+        color: #f85149;
+        border-color: #30363d;
+    }
+}

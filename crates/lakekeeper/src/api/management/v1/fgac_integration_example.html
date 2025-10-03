@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FGAC Widget Integration Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f6f8fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #24292f;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .table-info {
+            background: #f6f8fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 30px;
+            border: 1px solid #d0d7de;
+        }
+        
+        .table-info h2 {
+            margin: 0 0 15px 0;
+            color: #24292f;
+        }
+        
+        .table-info .table-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .table-info .detail-item {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            border: 1px solid #e1e5e9;
+        }
+        
+        .table-info .detail-item strong {
+            display: block;
+            color: #656d76;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        
+        .table-info .detail-item span {
+            color: #24292f;
+            font-weight: 500;
+        }
+        
+        .tabs {
+            border-bottom: 1px solid #d0d7de;
+            margin-bottom: 20px;
+        }
+        
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 12px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #656d76;
+            border-bottom: 2px solid transparent;
+            margin-right: 8px;
+        }
+        
+        .tab-button.active {
+            color: #0969da;
+            border-bottom-color: #0969da;
+        }
+        
+        .tab-button:hover {
+            color: #24292f;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .instructions h3 {
+            margin: 0 0 8px 0;
+            color: #856404;
+        }
+        
+        .instructions p {
+            margin: 0;
+            color: #856404;
+            font-size: 14px;
+        }
+        
+        .fgac-container {
+            min-height: 200px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 20px;
+        }
+    </style>
+    <link rel="stylesheet" href="/ui/fgac-widget.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Table Permissions Management</h1>
+        
+        <div class="table-info">
+            <h2>Table Information</h2>
+            <div class="table-details">
+                <div class="detail-item">
+                    <strong>Table Name</strong>
+                    <span id="display-table-name">sample_table</span>
+                </div>
+                <div class="detail-item">
+                    <strong>Warehouse</strong>
+                    <span id="display-warehouse-name">main_warehouse</span>
+                </div>
+                <div class="detail-item">
+                    <strong>Warehouse ID</strong>
+                    <span id="display-warehouse-id">-</span>
+                </div>
+                <div class="detail-item">
+                    <strong>Table ID</strong>
+                    <span id="display-table-id">-</span>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <strong>Warehouse ID:</strong>
+                <input type="text" id="warehouse-id-input" placeholder="Enter warehouse ID" 
+                       style="margin-left: 10px; padding: 6px; border: 1px solid #d0d7de; border-radius: 4px; width: 300px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <strong>Table ID:</strong>
+                <input type="text" id="table-id-input" placeholder="Enter table ID"
+                       style="margin-left: 10px; padding: 6px; border: 1px solid #d0d7de; border-radius: 4px; width: 300px;">
+            </div>
+            <button onclick="loadFGACWidget()" 
+                    style="background: #2da44e; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                Load FGAC Widget
+            </button>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('general')">General</button>
+            <button class="tab-button" onclick="showTab('permissions')">Permissions</button>
+            <button class="tab-button" onclick="showTab('fgac')">Fine-Grained Access Control</button>
+        </div>
+        
+        <div id="general-tab" class="tab-content active">
+            <h3>General Table Information</h3>
+            <p>This tab would contain general table information like schema, metadata, etc.</p>
+        </div>
+        
+        <div id="permissions-tab" class="tab-content">
+            <h3>Basic Permissions</h3>
+            <p>This tab would contain basic table-level permissions.</p>
+        </div>
+        
+        <div id="fgac-tab" class="tab-content">
+            <div class="instructions">
+                <h3>Fine-Grained Access Control</h3>
+                <p>This tab shows how FGAC can be integrated into the console. Enter warehouse ID and table ID above, then click "Load FGAC Widget" to see the integration in action.</p>
+            </div>
+            
+            <div id="fgac-widget-container" class="fgac-container">
+                <p style="color: #656d76; text-align: center; margin: 50px 0;">
+                    Enter warehouse ID and table ID above, then click "Load FGAC Widget" to load fine-grained access control settings.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/ui/fgac-widget.js"></script>
+    <script>
+        let fgacWidget = null;
+        
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show the selected tab content
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to the clicked tab button
+            event.target.classList.add('active');
+        }
+        
+        function loadFGACWidget() {
+            const warehouseId = document.getElementById('warehouse-id-input').value.trim();
+            const tableId = document.getElementById('table-id-input').value.trim();
+            
+            if (!warehouseId) {
+                alert('Please enter a warehouse ID');
+                return;
+            }
+            
+            if (!tableId) {
+                alert('Please enter a table ID');
+                return;
+            }
+            
+            // Update display
+            document.getElementById('display-warehouse-id').textContent = warehouseId;
+            document.getElementById('display-table-id').textContent = tableId;
+            
+            // Create FGAC widget
+            try {
+                fgacWidget = window.createFGACWidget(warehouseId, tableId, 'fgac-widget-container');
+                
+                // Switch to FGAC tab
+                showTab('fgac');
+                document.querySelector('[onclick="showTab(\'fgac\')"]').classList.add('active');
+                
+            } catch (error) {
+                console.error('Error loading FGAC widget:', error);
+                document.getElementById('fgac-widget-container').innerHTML = `
+                    <div style="color: #cf222e; text-align: center; padding: 20px;">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-fill some sample IDs for testing
+        document.addEventListener('DOMContentLoaded', function() {
+            // You can set default values here for testing
+            // document.getElementById('warehouse-id-input').value = 'your-warehouse-id';
+            // document.getElementById('table-id-input').value = 'your-table-id';
+        });
+    </script>
+</body>
+</html>

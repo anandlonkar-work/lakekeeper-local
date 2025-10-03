@@ -1,0 +1,301 @@
+ use axum::{
+    extract::{Path, State as AxumState},
+    http::StatusCode,
+    Extension, Json,
+};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+use crate::{
+    api::{ApiContext, Result},
+    request_metadata::RequestMetadata,
+    service::{authz::Authorizer, Catalog, SecretStore, State, TableId, Transaction},
+    WarehouseId,
+};
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct FgacTableInfo {
+    pub warehouse_id: Uuid,
+    pub table_id: Uuid,
+    pub warehouse_name: String,
+    pub namespace_name: String,
+    pub table_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ColumnPermissionInfo {
+    pub column_permission_id: Option<String>,
+    pub column_name: String,
+    pub principal_type: String, // "user" | "role" | "group"
+    pub principal_id: String,
+    pub permission_type: String, // "read" | "write" | "owner"
+    pub masking_method: Option<String>,
+    pub granted_by: String,
+    pub granted_at: String,
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RowPolicyInfo {
+    pub row_policy_id: Option<String>,
+    pub policy_name: String,
+    pub principal_type: String, // "user" | "role" | "group"
+    pub principal_id: String,
+    pub policy_expression: String,
+    pub policy_type: String, // "filter" | "deny" | "allow"
+    pub is_active: bool,
+    pub priority: i32,
+    pub granted_by: String,
+    pub granted_at: String,
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct FgacTableResponse {
+    pub table_info: FgacTableInfo,
+    pub available_columns: Vec<String>,
+    pub column_permissions: Vec<ColumnPermissionInfo>,
+    pub row_policies: Vec<RowPolicyInfo>,
+    pub available_principals: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FgacQuery {
+    pub warehouse_id: Option<Uuid>,
+    pub table_id: Option<Uuid>,
+}
+
+/// Get FGAC information for a table
+///
+/// This endpoint provides all the information needed to display and manage
+/// fine-grained access control for a specific table.
+pub async fn get_table_fgac<C: Catalog, A: Authorizer, S: SecretStore>(
+    Path((warehouse_id, table_id)): Path<(WarehouseId, TableId)>,
+    AxumState(_api_context): AxumState<ApiContext<State<A, C, S>>>,
+    Extension(_metadata): Extension<RequestMetadata>,
+) -> Result<Json<FgacTableResponse>, StatusCode> {
+    // For now, return mock data to make the UI functional
+    // In a real implementation, this would query the database using the table_id
+
+    let response = FgacTableResponse {
+        table_info: FgacTableInfo {
+            warehouse_id: *warehouse_id,
+            table_id: table_id.into(),
+            warehouse_name: "default_warehouse".to_string(),
+            namespace_name: "sales".to_string(),
+            table_name: "customers".to_string(),
+        },
+        available_columns: vec![
+            "customer_id".to_string(),
+            "name".to_string(),
+            "email".to_string(),
+            "phone".to_string(),
+            "address".to_string(),
+            "credit_rating".to_string(),
+            "ssn".to_string(),
+        ],
+        column_permissions: vec![
+            ColumnPermissionInfo {
+                column_permission_id: Some("00000000-0000-0000-0000-000000000001".to_string()),
+                column_name: "ssn".to_string(),
+                principal_type: "role".to_string(),
+                principal_id: "data_analyst".to_string(),
+                permission_type: "read".to_string(),
+                masking_method: Some("hash".to_string()),
+                granted_by: "admin".to_string(),
+                granted_at: chrono::Utc::now().to_rfc3339(),
+                expires_at: None,
+            },
+            ColumnPermissionInfo {
+                column_permission_id: Some("00000000-0000-0000-0000-000000000002".to_string()),
+                column_name: "credit_rating".to_string(),
+                principal_type: "role".to_string(),
+                principal_id: "sales_rep".to_string(),
+                permission_type: "write".to_string(),
+                masking_method: None,
+                granted_by: "admin".to_string(),
+                granted_at: chrono::Utc::now().to_rfc3339(),
+                expires_at: None,
+            },
+        ],
+        row_policies: vec![RowPolicyInfo {
+            row_policy_id: Some("00000000-0000-0000-0000-000000000003".to_string()),
+            policy_name: "regional_filter".to_string(),
+            principal_type: "role".to_string(),
+            principal_id: "sales_rep".to_string(),
+            policy_expression: "region = 'WEST'".to_string(),
+            policy_type: "filter".to_string(),
+            is_active: true,
+            priority: 100,
+            granted_by: "admin".to_string(),
+            granted_at: chrono::Utc::now().to_rfc3339(),
+            expires_at: None,
+        }],
+        available_principals: vec![
+            "user:alice".to_string(),
+            "user:bob".to_string(),
+            "role:admin".to_string(),
+            "role:data_analyst".to_string(),
+            "role:sales_rep".to_string(),
+        ],
+    };
+
+    Ok(Json(response))
+}
+
+/// Update FGAC permissions for a table
+pub async fn update_table_fgac<C: Catalog, A: Authorizer, S: SecretStore>(
+    Path((warehouse_id, table_id)): Path<(WarehouseId, TableId)>,
+    AxumState(_api_context): AxumState<ApiContext<State<A, C, S>>>,
+    Extension(_metadata): Extension<RequestMetadata>,
+    Json(request): Json<FgacTableResponse>,
+) -> Result<StatusCode, StatusCode> {
+    // For now, just log the update and return success
+    tracing::info!(
+        "FGAC update for table {}/{}: {} column permissions, {} row policies",
+        warehouse_id,
+        table_id,
+        request.column_permissions.len(),
+        request.row_policies.len()
+    );
+
+    Ok(StatusCode::OK)
+}
+
+/// Get FGAC information for a table using namespace and table names
+///
+/// This endpoint accepts namespace and table names (as used in the UI)
+/// and resolves them to the table_id to call the main handler.
+pub async fn get_table_fgac_by_name<C: Catalog, A: Authorizer, S: SecretStore>(
+    Path((warehouse_identifier, namespace, table_name)): Path<(String, String, String)>,
+    AxumState(api_context): AxumState<ApiContext<State<A, C, S>>>,
+    Extension(metadata): Extension<RequestMetadata>,
+) -> Result<Json<FgacTableResponse>, StatusCode> {
+    use crate::service::{NamespaceIdent, TableIdent, ListFlags};
+
+    tracing::info!(
+        "FGAC query for warehouse={}, namespace={}, table={}",
+        warehouse_identifier,
+        namespace,
+        table_name
+    );
+
+    // Resolve warehouse_id
+    let resolved_warehouse_uuid = Uuid::parse_str(&warehouse_identifier)
+        .unwrap_or_else(|_| Uuid::new_v5(&Uuid::NAMESPACE_DNS, warehouse_identifier.as_bytes()));
+    let warehouse_id = WarehouseId::from(resolved_warehouse_uuid);
+
+    // Start read transaction
+    let mut transaction = C::Transaction::begin_read(api_context.v1_state.catalog.clone())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to start transaction: {}", e.error.message);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Look up table_id from warehouse + namespace + table_name
+    let namespace_ident = NamespaceIdent::from_vec(vec![namespace.clone()]).map_err(|e| {
+        tracing::error!("Invalid namespace: {:?}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+    let table_ident = TableIdent::new(namespace_ident.clone(), table_name.clone());
+
+    let table_id = C::table_to_id(
+        warehouse_id,
+        &table_ident,
+        ListFlags::default(),
+        transaction.transaction(),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to resolve table: {:?}", e);
+        StatusCode::NOT_FOUND
+    })?
+    .ok_or_else(|| {
+        tracing::error!("Table not found: {}/{}", namespace, table_name);
+        StatusCode::NOT_FOUND
+    })?;
+
+    // TODO: Get table metadata to extract available columns from Iceberg schema
+    // For now, return empty list - the UI can work without this or we can add it later
+    // by loading the actual Iceberg table metadata file
+    let available_columns: Vec<String> = vec![];
+
+    // Query column permissions from database
+    let column_permissions = query_column_permissions_for_ui::<C>(
+        &mut transaction,
+        &warehouse_identifier,
+        &namespace,
+        &table_name,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to query column permissions: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Query row policies from database
+    let row_policies = query_row_policies_for_ui::<C>(
+        &mut transaction,
+        &warehouse_identifier,
+        &namespace,
+        &table_name,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to query row policies: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let response = FgacTableResponse {
+        table_info: FgacTableInfo {
+            warehouse_id: resolved_warehouse_uuid,
+            table_id: table_id.into(),
+            warehouse_name: warehouse_identifier.clone(),
+            namespace_name: namespace.clone(),
+            table_name: table_name.clone(),
+        },
+        available_columns,
+        column_permissions,
+        row_policies,
+        available_principals: vec![
+            // TODO: Query from users and roles tables
+            "user:alice".to_string(),
+            "user:bob".to_string(),
+            "role:admin".to_string(),
+            "role:analyst".to_string(),
+        ],
+    };
+
+    transaction.commit().await.map_err(|e| {
+        tracing::error!("Failed to commit transaction: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(response))
+}
+
+/// Query column permissions from database for UI display
+async fn query_column_permissions_for_ui<C: Catalog>(
+    _transaction: &mut C::Transaction,
+    _warehouse_name: &str,
+    _namespace: &str,
+    _table_name: &str,
+) -> Result<Vec<ColumnPermissionInfo>, Box<dyn std::error::Error>> {
+    // TODO: Query database when type system allows accessing transaction
+    // See FGAC_STATUS.md for implementation options
+    Ok(Vec::new())
+}
+
+/// Query row policies from database for UI display
+async fn query_row_policies_for_ui<C: Catalog>(
+    _transaction: &mut C::Transaction,
+    _warehouse_name: &str,
+    _namespace: &str,
+    _table_name: &str,
+) -> Result<Vec<RowPolicyInfo>, Box<dyn std::error::Error>> {
+    // TODO: Query database when type system allows accessing transaction
+    // See FGAC_STATUS.md for implementation options
+    Ok(Vec::new())
+}

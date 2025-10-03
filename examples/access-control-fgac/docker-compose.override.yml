@@ -1,0 +1,12 @@
+services:
+  lakekeeper:
+    image: ${LAKEKEEPER_FGAC_IMAGE:-access-control-fgac-lakekeeper:latest}
+    pull_policy: never
+    ports:
+      - "8181:8181"
+    environment:
+      - RUST_LOG=info,lakekeeper=debug
+    
+  migrate:
+    image: ${LAKEKEEPER_FGAC_IMAGE:-access-control-fgac-lakekeeper:latest}
+    pull_policy: never

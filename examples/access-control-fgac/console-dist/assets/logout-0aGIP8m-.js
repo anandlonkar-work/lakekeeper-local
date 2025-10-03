@@ -1,0 +1,1 @@
+import{a0 as s,a1 as a,ak as r,as as n,F as u,z as c,aj as l}from"./index-CIGR5p8I.js";const m=s({__name:"logout",setup(p){const e=a(),t=r(),o=n();return u(()=>{t.isAuthenticated=!1,t.unsetUser(),e.projectSelected["project-id"]="",e.projectSelected["project-name"]="None",o.push("/login")}),(i,d)=>(c(),l("div",null,"You're logged out"))}});export{m as default};

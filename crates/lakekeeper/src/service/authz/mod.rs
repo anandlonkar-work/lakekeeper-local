@@ -6,9 +6,8 @@ use strum::EnumIter;
 use strum_macros::EnumString;
 
 use super::{
-    catalog::{RowPolicy},
-    health::HealthExt, Actor, Catalog, ColumnId, NamespaceId, ProjectId, RoleId, RowPolicyId, SecretStore, State, TableId,
-    TabularDetails, ViewId, WarehouseId,
+    catalog::RowPolicy, health::HealthExt, Actor, Catalog, ColumnId, NamespaceId, ProjectId,
+    RoleId, RowPolicyId, SecretStore, State, TableId, TabularDetails, ViewId, WarehouseId,
 };
 use crate::{api::iceberg::v1::Result, request_metadata::RequestMetadata, service::ServerId};
 

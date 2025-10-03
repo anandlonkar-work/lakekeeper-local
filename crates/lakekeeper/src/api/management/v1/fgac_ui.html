@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FGAC Matrix - Fine-Grained Access Control</title>
+    <style>
+        /* FGAC Matrix Styles */
+        .fgac-container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .fgac-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+
+        .fgac-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .fgac-breadcrumb {
+            font-size: 14px;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fgac-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .fgac-summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .fgac-summary-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+
+        .fgac-summary-label {
+            font-size: 14px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .fgac-tabs {
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 25px;
+        }
+
+        .fgac-tab {
+            display: inline-block;
+            padding: 12px 24px;
+            margin-right: 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .fgac-tab.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+        }
+
+        .fgac-tab:hover {
+            color: #0056b3;
+            background: #f8f9fa;
+        }
+
+        .fgac-tab-content {
+            display: none;
+        }
+
+        .fgac-tab-content.active {
+            display: block;
+        }
+
+        /* Matrix Table Styles */
+        .fgac-matrix-container {
+            overflow-x: auto;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .fgac-matrix {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+
+        .fgac-matrix th,
+        .fgac-matrix td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+
+        .fgac-matrix th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .fgac-matrix .column-header {
+            background: #e3f2fd;
+            writing-mode: vertical-lr;
+            text-orientation: mixed;
+            min-width: 40px;
+            max-width: 80px;
+            word-break: break-all;
+        }
+
+        .fgac-matrix .principal-header {
+            background: #fff3e0;
+            text-align: left;
+            min-width: 150px;
+            font-weight: 500;
+        }
+
+        .fgac-permission-cell {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .fgac-permission-cell:hover {
+            background: #f8f9fa;
+            transform: scale(1.05);
+        }
+
+        .fgac-permission-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 60px;
+        }
+
+        .fgac-permission-allow {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .fgac-permission-block {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .fgac-permission-mask {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .fgac-permission-custom {
+            background: #e2e3e5;
+            color: #41464b;
+            border: 1px solid #d6d8db;
+        }
+
+        .fgac-permission-none {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 1px solid #e9ecef;
+        }
+
+        /* Row Policy Styles */
+        .fgac-policy-container {
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            overflow: hidden;
+        }
+
+        .fgac-policy-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .fgac-policy-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .fgac-policy-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .fgac-policy-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f8f9fa;
+            transition: background 0.2s ease;
+        }
+
+        .fgac-policy-item:hover {
+            background: #f8f9fa;
+        }
+
+        .fgac-policy-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .fgac-policy-expression {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #495057;
+            border-left: 3px solid #007bff;
+            margin-bottom: 8px;
+        }
+
+        .fgac-policy-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .fgac-policy-principals {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .fgac-principal-badge {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        /* Controls */
+        .fgac-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .fgac-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fgac-btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .fgac-btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .fgac-btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .fgac-btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .fgac-btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .fgac-btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .fgac-btn-outline {
+            background: transparent;
+            color: #007bff;
+            border: 1px solid #007bff;
+        }
+
+        .fgac-btn-outline:hover {
+            background: #007bff;
+            color: white;
+        }
+
+        /* Loading and Empty States */
+        .fgac-loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .fgac-empty {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .fgac-spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .fgac-container {
+                padding: 10px;
+            }
+            
+            .fgac-summary {
+                grid-template-columns: 1fr;
+            }
+            
+            .fgac-controls {
+                flex-direction: column;
+            }
+            
+            .fgac-btn {
+                justify-content: center;
+            }
+        }
+
+        /* Tooltips */
+        .fgac-tooltip {
+            position: relative;
+        }
+
+        .fgac-tooltip::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .fgac-tooltip:hover::after {
+            opacity: 1;
+        }
+
+        /* Status Indicators */
+        .fgac-status-active {
+            color: #28a745;
+        }
+
+        .fgac-status-inactive {
+            color: #dc3545;
+        }
+
+        .fgac-status-warning {
+            color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="fgac-container">
+        <!-- Header -->
+        <div class="fgac-header">
+            <div>
+                <h1 class="fgac-title">Fine-Grained Access Control</h1>
+                <div class="fgac-breadcrumb">
+                    <span>Warehouse:</span> <strong id="warehouse-name">loading...</strong>
+                    <span>•</span>
+                    <span>Namespace:</span> <strong id="namespace-name">loading...</strong>
+                    <span>•</span>
+                    <span>Table:</span> <strong id="table-name">loading...</strong>
+                </div>
+            </div>
+            <div class="fgac-controls">
+                <button class="fgac-btn fgac-btn-primary" onclick="showTemplateModal()">
+                    📋 Apply Template
+                </button>
+                <button class="fgac-btn fgac-btn-success" onclick="bulkEdit()">
+                    ⚡ Bulk Edit
+                </button>
+                <button class="fgac-btn fgac-btn-outline" onclick="exportConfig()">
+                    💾 Export
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="fgac-summary">
+            <div class="fgac-summary-card">
+                <div class="fgac-summary-value" id="total-columns">0</div>
+                <div class="fgac-summary-label">Total Columns</div>
+            </div>
+            <div class="fgac-summary-card">
+                <div class="fgac-summary-value" id="restricted-columns">0</div>
+                <div class="fgac-summary-label">Restricted Columns</div>
+            </div>
+            <div class="fgac-summary-card">
+                <div class="fgac-summary-value" id="active-policies">0</div>
+                <div class="fgac-summary-label">Row Policies</div>
+            </div>
+            <div class="fgac-summary-card">
+                <div class="fgac-summary-value" id="affected-principals">0</div>
+                <div class="fgac-summary-label">Affected Principals</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="fgac-tabs">
+            <button class="fgac-tab active" onclick="showTab('matrix')">Column Permissions Matrix</button>
+            <button class="fgac-tab" onclick="showTab('policies')">Row Policies</button>
+            <button class="fgac-tab" onclick="showTab('audit')">Audit Log</button>
+        </div>
+
+        <!-- Tab Content: Matrix -->
+        <div id="matrix-tab" class="fgac-tab-content active">
+            <div class="fgac-loading" id="matrix-loading">
+                <div class="fgac-spinner"></div>
+                <p>Loading column permissions matrix...</p>
+            </div>
+            <div class="fgac-matrix-container" id="matrix-container" style="display: none;">
+                <table class="fgac-matrix" id="permissions-matrix">
+                    <thead>
+                        <tr>
+                            <th class="principal-header">Principal</th>
+                            <!-- Column headers will be populated by JavaScript -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Matrix rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab Content: Row Policies -->
+        <div id="policies-tab" class="fgac-tab-content">
+            <div class="fgac-policy-container">
+                <div class="fgac-policy-header">
+                    <div class="fgac-policy-title">Row-Level Security Policies</div>
+                    <button class="fgac-btn fgac-btn-primary" onclick="createRowPolicy()">
+                        ➕ Add Policy
+                    </button>
+                </div>
+                <div class="fgac-policy-list" id="policy-list">
+                    <div class="fgac-loading">
+                        <div class="fgac-spinner"></div>
+                        <p>Loading row policies...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: Audit Log -->
+        <div id="audit-tab" class="fgac-tab-content">
+            <div class="fgac-policy-container">
+                <div class="fgac-policy-header">
+                    <div class="fgac-policy-title">FGAC Audit Log</div>
+                    <button class="fgac-btn fgac-btn-outline" onclick="refreshAuditLog()">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div class="fgac-policy-list" id="audit-list">
+                    <div class="fgac-loading">
+                        <div class="fgac-spinner"></div>
+                        <p>Loading audit log...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="fgac-matrix.js"></script>
+</body>
+</html>

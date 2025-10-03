@@ -4,6 +4,7 @@ pub mod v1 {
     #![allow(clippy::needless_for_each)]
 
     pub mod bootstrap;
+    pub mod fgac_api;
     pub mod namespace;
     pub mod project;
     pub mod role;
@@ -18,7 +19,7 @@ pub mod v1 {
 
     use axum::{
         extract::{Path, Query, State as AxumState},
-        response::{IntoResponse, Response},
+        response::{Html, IntoResponse, Response},
         routing::{get, post},
         Extension, Json, Router,
     };
@@ -96,7 +97,8 @@ pub mod v1 {
             (name = "warehouse", description = "Manage Warehouses"),
             (name = "tasks", description = "View & Manage Tasks"),
             (name = "user", description = "Manage Users"),
-            (name = "role", description = "Manage Roles")
+            (name = "role", description = "Manage Roles"),
+            (name = "fgac", description = "Fine-Grained Access Control - Column and Row Level Security")
         ),
         security(
             ("bearerAuth" = [])
@@ -1944,7 +1946,32 @@ pub mod v1 {
                     ManagementV1Endpoint::ControlTasks.path_in_management_v1(),
                     post(control_tasks),
                 )
+                // FGAC UI
+                .route("/fgac-ui", get(serve_fgac_ui))
+                .route("/table-fgac-ui", get(serve_table_fgac_ui))
+                // FGAC API endpoints
+                .route(
+                    "/warehouse/{warehouse_id}/table/{table_id}/fgac",
+                    get(fgac_api::get_table_fgac).put(fgac_api::update_table_fgac),
+                )
+                // FGAC API endpoint with namespace/table names (for UI)
+                .route(
+                    "/warehouse/{warehouse_id}/namespace/{namespace}/table/{table}/fgac/configuration",
+                    get(fgac_api::get_table_fgac_by_name),
+                )
                 .merge(authorizer.new_router())
         }
+    }
+
+    /// Serve the FGAC UI HTML file
+    async fn serve_fgac_ui() -> impl IntoResponse {
+        const FGAC_UI_HTML: &str = include_str!("v1/fgac_ui.html");
+        Html(FGAC_UI_HTML)
+    }
+
+    /// Serve the table-specific FGAC management UI
+    async fn serve_table_fgac_ui() -> impl IntoResponse {
+        const TABLE_FGAC_HTML: &str = include_str!("v1/table_fgac.html");
+        Html(TABLE_FGAC_HTML)
     }
 }

@@ -1,0 +1,240 @@
+# Lakekeeper FGAC-OPA Integration Configuration
+# This file shows how to integrate the FGAC UI with OPA policy generation
+
+# Database Configuration
+database:
+  # Connection details for FGAC permissions storage
+  host: localhost
+  port: 5432
+  database: lakekeeper
+  username: lakekeeper
+  password_env: LAKEKEEPER_DATABASE_PASSWORD
+
+# OPA Integration Settings
+opa:
+  # OPA server configuration
+  server:
+    host: localhost
+    port: 8181
+    # OPA policy bundle endpoint
+    bundle_endpoint: "http://localhost:8181/v1/data/trino"
+    
+  # Policy generation settings
+  policies:
+    # Directory where generated policies are written
+    output_directory: "./authz/opa-bridge/policies/trino"
+    # Policy file names
+    column_mask_file: "columnMask.rego"
+    row_filters_file: "rowFilters.rego"
+    allow_column_file: "allow_column.rego"
+    allow_row_file: "allow_row.rego"
+    
+  # Policy deployment settings
+  deployment:
+    # Auto-deploy policies when FGAC configuration changes
+    auto_deploy: true
+    # Validate policies before deployment
+    validate_before_deploy: true
+    # Backup existing policies before overwriting
+    backup_existing: true
+    backup_directory: "./authz/opa-bridge/policies/backup"
+
+# Trino Integration
+trino:
+  # Trino cluster configuration
+  coordinator_host: localhost
+  coordinator_port: 8080
+  
+  # OPA policy URIs for Trino
+  column_masking_uri: "http://localhost:8181/v1/data/trino/columnMask"
+  row_filters_uri: "http://localhost:8181/v1/data/trino/rowFilters"
+  column_access_uri: "http://localhost:8181/v1/data/trino/allow"
+
+# Identity Provider Integration
+identity:
+  # User/role/group mapping configuration
+  provider: "keycloak"  # or "ldap", "oauth2", etc.
+  
+  # Keycloak specific settings
+  keycloak:
+    server_url: "http://localhost:8080/auth"
+    realm: "lakekeeper"
+    client_id: "trino-client"
+    
+  # User ID to username mapping
+  # In production, this would query your identity provider
+  user_mappings:
+    # Format: uuid -> username
+    "550e8400-e29b-41d4-a716-446655440000": "alice"
+    "550e8400-e29b-41d4-a716-446655440001": "bob"
+    "550e8400-e29b-41d4-a716-446655440002": "charlie"
+    
+  # Role mappings
+  role_mappings:
+    "data_analyst": ["alice", "bob"]
+    "data_scientist": ["charlie"]
+    "admin": ["alice"]
+
+# FGAC UI Configuration
+fgac_ui:
+  # Web interface settings
+  port: 8080
+  host: "0.0.0.0"
+  
+  # Feature toggles
+  features:
+    column_masking: true
+    row_filtering: true
+    bulk_operations: true
+    policy_templates: true
+    audit_logging: true
+    
+  # UI customization
+  ui:
+    theme: "light"  # or "dark"
+    default_page_size: 20
+    max_bulk_operations: 1000
+    
+  # Policy validation rules
+  validation:
+    max_permissions_per_column: 50
+    max_row_policies_per_table: 20
+    require_policy_description: true
+    validate_sql_expressions: true
+
+# Monitoring and Alerting
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    endpoint: "/metrics"
+    
+  # Health checks
+  health:
+    enabled: true
+    endpoint: "/health"
+    
+  # Alerting
+  alerts:
+    # Alert when policy validation fails
+    validation_failures: true
+    # Alert when policy deployment fails
+    deployment_failures: true
+    # Alert for high permission counts
+    high_permission_counts:
+      enabled: true
+      threshold: 100
+
+# Logging Configuration
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # or "text"
+  
+  # Audit logging for FGAC operations
+  audit:
+    enabled: true
+    log_all_operations: true
+    log_policy_changes: true
+    log_permission_grants: true
+    retention_days: 90
+
+# Performance Settings
+performance:
+  # Database connection pooling
+  db_pool:
+    max_connections: 20
+    min_connections: 2
+    connection_timeout_seconds: 30
+    
+  # Policy generation caching
+  policy_cache:
+    enabled: true
+    ttl_seconds: 300  # 5 minutes
+    max_entries: 1000
+    
+  # Background tasks
+  background_tasks:
+    # Automatically sync policies with OPA
+    policy_sync_interval_seconds: 60
+    # Clean up old audit logs
+    audit_cleanup_interval_hours: 24
+
+# Development and Testing
+development:
+  # Enable debug features
+  debug_mode: false
+  
+  # Mock data for testing
+  mock_data:
+    enabled: false
+    generate_sample_permissions: false
+    
+  # API documentation
+  swagger_ui:
+    enabled: true
+    endpoint: "/api/docs"
+
+# Security Settings
+security:
+  # API authentication
+  api_auth:
+    enabled: true
+    method: "jwt"  # or "basic", "oauth2"
+    
+  # CORS settings
+  cors:
+    enabled: true
+    allowed_origins: ["http://localhost:3000", "http://localhost:8080"]
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+
+# Example Policy Templates
+policy_templates:
+  - name: "Department Access"
+    description: "Restrict access based on user department"
+    column_permissions:
+      - column_pattern: "salary*"
+        permission_type: "mask"
+        masking_method: "hash"
+        applies_to:
+          principal_type: "role"
+          principal_pattern: "hr_*"
+    row_policies:
+      - name: "Department Filter"
+        expression: "department = get_user_department()"
+        
+  - name: "Sensitive Data Protection"
+    description: "Protect PII and sensitive columns"
+    column_permissions:
+      - column_pattern: "*ssn*"
+        permission_type: "block"
+        applies_to:
+          principal_type: "role"
+          principal_pattern: "!admin"
+      - column_pattern: "*email*"
+        permission_type: "mask"
+        masking_method: "partial"
+        applies_to:
+          principal_type: "role"
+          principal_pattern: "analyst"
+
+# Integration Testing
+testing:
+  # Test data generation
+  generate_test_data: false
+  test_warehouse_id: "test_warehouse"
+  test_namespace: "test_schema"
+  test_table: "test_table"
+  
+  # OPA policy testing
+  opa_tests:
+    enabled: true
+    test_directory: "./tests/opa"
+    
+  # End-to-end testing
+  e2e_tests:
+    enabled: false
+    trino_endpoint: "http://localhost:8080"

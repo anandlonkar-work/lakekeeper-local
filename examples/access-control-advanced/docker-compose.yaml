@@ -27,6 +27,8 @@ services:
       - LAKEKEEPER_SCOPE=lakekeeper
       - TRINO_LAKEKEEPER_CATALOG_NAME=lakekeeper
       - LAKEKEEPER_LAKEKEEPER_WAREHOUSE=demo
+      # Enable HTTP calls from OPA policies to Lakekeeper's internal API
+      - OPA_HTTP_SEND_TIMEOUT=10s
     depends_on:
       lakekeeper:
         condition: service_healthy

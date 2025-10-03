@@ -79,7 +79,7 @@ impl<C: Catalog, A: Authorizer + Clone, S: SecretStore, N: Authenticator + Debug
 pub async fn new_full_router<
     C: Catalog,
     A: Authorizer + Clone,
-    S: SecretStore,
+    S: SecretStore + Clone,
     N: Authenticator + 'static,
 >(
     RouterArgs {
@@ -110,9 +110,13 @@ pub async fn new_full_router<
         option_layer(None)
     };
 
+    // Internal OPA routes - no auth required (internal network only)
+    let internal_opa_routes = crate::api::internal::opa::new_router::<A, C, S>();
+
     let router = Router::new()
         .nest("/catalog/v1", v1_routes)
         .nest("/management/v1", management_routes)
+        .nest("/internal/opa", internal_opa_routes)
         .layer(axum::middleware::from_fn_with_state(
             endpoint_statistics_tracker_tx,
             crate::service::endpoint_statistics::endpoint_statistics_middleware_fn,

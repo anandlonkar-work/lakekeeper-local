@@ -3,7 +3,7 @@ FROM rust:1.87-slim-bookworm AS chef
 ARG NO_CHEF=false
 ENV NO_CHEF=${NO_CHEF}
 
-ENV NODE_VERSION=20.18.0
+ENV NODE_VERSION=20.18.1
 ENV NVM_DIR=/root/.nvm
 
 # We only pay the installation cost once, 
@@ -35,6 +35,22 @@ RUN $NO_CHEF || cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
 ENV SQLX_OFFLINE=true
+ARG CONSOLE_BUILD_TOKEN=default
+ENV CONSOLE_BUILD_TOKEN=${CONSOLE_BUILD_TOKEN}
+# Manually build the console before cargo does - this bypasses cargo's caching
+RUN bash -c '. /root/.nvm/nvm.sh && \
+  echo "Console build token: ${CONSOLE_BUILD_TOKEN}" && \
+  echo "Scanning for lakekeeper-console checkout" && \
+  find /usr/local/cargo/git/checkouts -maxdepth 4 -type f -name package.json -print && \
+  CONSOLE_PACKAGE_JSON=$(find /usr/local/cargo/git/checkouts -maxdepth 4 -type f -path "*/lakekeeper-console-*/package.json" | head -1) && \
+  if [ -n "$CONSOLE_PACKAGE_JSON" ]; then \
+    CONSOLE_DIR=$(dirname "$CONSOLE_PACKAGE_JSON") && \
+    echo "Found console at: $CONSOLE_DIR" && \
+    cd "$CONSOLE_DIR" && \
+        npm ci && \
+        npm run build && \
+        echo "Console built successfully"; \
+    fi'
 RUN cargo build --release --all-features --bin lakekeeper
 
 # our final base

@@ -2415,7 +2415,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "976dd42dc7e85965fe702eb8164f21f450704bdde31faefd6471dba214cb594e"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4018,7 +4018,7 @@ dependencies = [
 [[package]]
 name = "lakekeeper-console"
 version = "0.1.0"
-source = "git+https://github.com/lakekeeper/console?rev=v0.10.1#30fb240fa734e8672283a3dc52f440a6d3da765f"
+source = "git+https://github.com/anandlonkar-work/lakekeeper-console?branch=feature%2Ffgac-management-tab#a7b1fb8e8e14c302792a14a8526995254d93f502"
 dependencies = [
  "derivative",
  "fs_extra",
@@ -5627,7 +5627,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.9",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6237,7 +6237,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6250,7 +6250,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7300,7 +7300,7 @@ dependencies = [
  "getrandom 0.3.2",
  "once_cell",
  "rustix 1.0.5",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

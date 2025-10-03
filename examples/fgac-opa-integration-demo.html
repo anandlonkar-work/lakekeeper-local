@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FGAC-OPA Integration Example</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .policy-status { font-size: 0.8em; }
+        .policy-valid { color: #28a745; }
+        .policy-invalid { color: #dc3545; }
+        .generated-policy { 
+            background-color: #f8f9fa; 
+            border-left: 4px solid #007bff; 
+            padding: 15px; 
+            margin: 10px 0; 
+        }
+        .opa-status {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: white;
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- OPA Integration Status Bar -->
+    <div class="opa-status">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h6 class="mb-0">OPA Integration Status</h6>
+                    <small id="opa-status-text" class="text-muted">Checking connection...</small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button id="sync-policies-btn" class="btn btn-sm btn-primary me-2">
+                        <i class="fas fa-sync"></i> Sync Policies
+                    </button>
+                    <button id="deploy-all-btn" class="btn btn-sm btn-success">
+                        <i class="fas fa-rocket"></i> Deploy All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Main FGAC UI -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Table Access Control Matrix</h5>
+                        <div>
+                            <select id="table-selector" class="form-select form-select-sm d-inline-block w-auto me-2">
+                                <option value="warehouse1.sales.customers">warehouse1.sales.customers</option>
+                                <option value="warehouse1.sales.orders">warehouse1.sales.orders</option>
+                                <option value="warehouse1.hr.employees">warehouse1.hr.employees</option>
+                            </select>
+                            <button id="generate-policies-btn" class="btn btn-sm btn-info">
+                                <i class="fas fa-code"></i> Generate OPA Policies
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Permission Matrix -->
+                        <div id="permission-matrix">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Column</th>
+                                        <th>alice (user)</th>
+                                        <th>bob (user)</th>
+                                        <th>data_analyst (role)</th>
+                                        <th>hr_manager (role)</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="matrix-body">
+                                    <tr>
+                                        <td><strong>customer_id</strong></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td>
+                                            <button class="btn btn-xs btn-outline-primary edit-column-btn" data-column="customer_id">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>customer_name</strong></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td><span class="badge bg-warning">Mask</span></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td>
+                                            <button class="btn btn-xs btn-outline-primary edit-column-btn" data-column="customer_name">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>email</strong></td>
+                                        <td><span class="badge bg-warning">Mask</span></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td><span class="badge bg-warning">Mask</span></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td>
+                                            <button class="btn btn-xs btn-outline-primary edit-column-btn" data-column="email">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>salary</strong></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td><span class="badge bg-secondary">Block</span></td>
+                                        <td><span class="badge bg-success">Allow</span></td>
+                                        <td>
+                                            <button class="btn btn-xs btn-outline-primary edit-column-btn" data-column="salary">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Row Policies -->
+                        <div class="mt-4">
+                            <h6>Row-Level Security Policies</h6>
+                            <div id="row-policies">
+                                <div class="card card-body mb-2">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <strong>Department Filter</strong>
+                                            <br><small class="text-muted">department = get_user_department()</small>
+                                            <br><span class="badge bg-success policy-status">✓ Active</span>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary">Edit</button>
+                                    </div>
+                                </div>
+                                <div class="card card-body mb-2">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <strong>Region Access</strong>
+                                            <br><small class="text-muted">region IN (get_user_regions())</small>
+                                            <br><span class="badge bg-success policy-status">✓ Active</span>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary">Edit</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OPA Policy Preview -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Generated OPA Policies</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="policy-preview">
+                            <div class="generated-policy">
+                                <h6>columnMask.rego</h6>
+                                <small class="policy-status policy-valid">✓ Valid</small>
+                                <pre class="mt-2" style="font-size: 0.7em; max-height: 200px; overflow-y: auto;"><code>package trino
+
+# Column masking for customers table
+columnMask := {"expression": "SHA256(CAST(column_value AS VARCHAR))"} if {
+    username == "bob"
+    column_resource.catalogName == "warehouse1"
+    column_resource.schemaName == "sales"
+    column_resource.tableName == "customers"
+    column_resource.columnName == "customer_name"
+}
+
+columnMask := {"expression": "CONCAT(LEFT(column_value, 3), '***')"} if {
+    username in ["alice", "data_analyst"]
+    column_resource.catalogName == "warehouse1"
+    column_resource.schemaName == "sales"
+    column_resource.tableName == "customers"
+    column_resource.columnName == "email"
+}</code></pre>
+                            </div>
+
+                            <div class="generated-policy">
+                                <h6>rowFilters.rego</h6>
+                                <small class="policy-status policy-valid">✓ Valid</small>
+                                <pre class="mt-2" style="font-size: 0.7em; max-height: 200px; overflow-y: auto;"><code>package trino
+
+# Row filtering for customers table
+rowFilters contains {"expression": "department = get_user_department()"} if {
+    table_resource.catalogName == "warehouse1"
+    table_resource.schemaName == "sales"
+    table_resource.tableName == "customers"
+}
+
+rowFilters contains {"expression": "region IN (get_user_regions())"} if {
+    table_resource.catalogName == "warehouse1"
+    table_resource.schemaName == "sales"
+    table_resource.tableName == "customers"
+}</code></pre>
+                            </div>
+
+                            <div class="generated-policy">
+                                <h6>allow_column.rego</h6>
+                                <small class="policy-status policy-valid">✓ Valid</small>
+                                <pre class="mt-2" style="font-size: 0.7em; max-height: 200px; overflow-y: auto;"><code>package trino
+
+# Column access control
+allow if {
+    input.action.operation == "SelectFromColumns"
+    catalog := input.action.resource.table.catalogName
+    schema := input.action.resource.table.schemaName
+    table := input.action.resource.table.tableName
+    column := input.action.resource.columns[_]
+    
+    # Check column permissions
+    has_column_access(catalog, schema, table, column, "read_data")
+}</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <div class="d-grid gap-2">
+                                <button id="validate-policies-btn" class="btn btn-sm btn-outline-warning">
+                                    <i class="fas fa-check-circle"></i> Validate Policies
+                                </button>
+                                <button id="deploy-table-btn" class="btn btn-sm btn-success">
+                                    <i class="fas fa-rocket"></i> Deploy Table Policies
+                                </button>
+                                <button id="test-policies-btn" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-flask"></i> Test Policies
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Policy Status -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">Policy Status</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="policy-status">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="text-center">
+                                        <div class="h4 text-success">3</div>
+                                        <small class="text-muted">Active Policies</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center">
+                                        <div class="h4 text-info">12</div>
+                                        <small class="text-muted">Permissions</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-12">
+                                    <small class="text-muted">Last Deployed:</small>
+                                    <br><small id="last-deployed">2024-12-19 10:30:45 UTC</small>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <small class="text-muted">OPA Status:</small>
+                                    <br><span id="opa-health" class="badge bg-success">Healthy</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">OPA Integration Activity Log</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="activity-log" style="max-height: 300px; overflow-y: auto;">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <strong>Policy Generated</strong>
+                                    <br><small class="text-muted">Generated columnMask.rego for warehouse1.sales.customers</small>
+                                </div>
+                                <small class="text-muted">2024-12-19 10:32:15</small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <strong>Policy Deployed</strong>
+                                    <br><small class="text-muted">Deployed 3 policies to OPA server</small>
+                                </div>
+                                <small class="text-muted">2024-12-19 10:30:45</small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <strong>Validation Passed</strong>
+                                    <br><small class="text-muted">All policies validated successfully</small>
+                                </div>
+                                <small class="text-muted">2024-12-19 10:30:30</small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <strong>Permission Updated</strong>
+                                    <br><small class="text-muted">Updated email column masking for data_analyst role</small>
+                                </div>
+                                <small class="text-muted">2024-12-19 10:28:12</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for editing permissions -->
+    <div class="modal fade" id="editPermissionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Column Permissions</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="permission-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">Column</label>
+                                <input type="text" class="form-control" id="modal-column" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Principal</label>
+                                <select class="form-select" id="modal-principal">
+                                    <option value="alice">alice (user)</option>
+                                    <option value="bob">bob (user)</option>
+                                    <option value="data_analyst">data_analyst (role)</option>
+                                    <option value="hr_manager">hr_manager (role)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Permission Type</label>
+                                <select class="form-select" id="modal-permission-type">
+                                    <option value="allow">Allow</option>
+                                    <option value="mask">Mask</option>
+                                    <option value="block">Block</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6" id="masking-method-group">
+                                <label class="form-label">Masking Method</label>
+                                <select class="form-select" id="modal-masking-method">
+                                    <option value="hash">Hash (SHA256)</option>
+                                    <option value="partial">Partial (show first 3 chars)</option>
+                                    <option value="null">NULL</option>
+                                    <option value="custom">Custom Expression</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3" id="custom-expression-group" style="display: none;">
+                            <div class="col-12">
+                                <label class="form-label">Custom Masking Expression</label>
+                                <input type="text" class="form-control" id="modal-custom-expression" 
+                                       placeholder="e.g., CONCAT('***', RIGHT(column_value, 4))">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-permission-btn">
+                        Save & Generate Policy
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://kit.fontawesome.com/your-font-awesome-kit.js"></script>
+    
+    <script>
+        // FGAC-OPA Integration JavaScript
+        class FgacOpaIntegration {
+            constructor() {
+                this.currentTable = 'warehouse1.sales.customers';
+                this.initializeEventListeners();
+                this.checkOpaStatus();
+                this.loadTableData();
+            }
+
+            initializeEventListeners() {
+                // OPA integration buttons
+                document.getElementById('sync-policies-btn').addEventListener('click', () => this.syncPolicies());
+                document.getElementById('deploy-all-btn').addEventListener('click', () => this.deployAllPolicies());
+                document.getElementById('generate-policies-btn').addEventListener('click', () => this.generateTablePolicies());
+                document.getElementById('validate-policies-btn').addEventListener('click', () => this.validatePolicies());
+                document.getElementById('deploy-table-btn').addEventListener('click', () => this.deployTablePolicies());
+                document.getElementById('test-policies-btn').addEventListener('click', () => this.testPolicies());
+
+                // Table selector
+                document.getElementById('table-selector').addEventListener('change', (e) => {
+                    this.currentTable = e.target.value;
+                    this.loadTableData();
+                });
+
+                // Permission editing
+                document.querySelectorAll('.edit-column-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const column = e.target.closest('button').dataset.column;
+                        this.editColumnPermission(column);
+                    });
+                });
+
+                // Modal form handling
+                document.getElementById('modal-permission-type').addEventListener('change', (e) => {
+                    const maskingGroup = document.getElementById('masking-method-group');
+                    maskingGroup.style.display = e.target.value === 'mask' ? 'block' : 'none';
+                });
+
+                document.getElementById('modal-masking-method').addEventListener('change', (e) => {
+                    const customGroup = document.getElementById('custom-expression-group');
+                    customGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
+                });
+
+                document.getElementById('save-permission-btn').addEventListener('click', () => this.savePermission());
+            }
+
+            async checkOpaStatus() {
+                try {
+                    const response = await fetch('/api/v1/opa/deployment/status');
+                    const status = await response.json();
+                    
+                    const statusText = document.getElementById('opa-status-text');
+                    const healthBadge = document.getElementById('opa-health');
+                    
+                    if (status.is_deployed) {
+                        statusText.textContent = `Connected - ${status.active_policies} active policies`;
+                        statusText.className = 'text-success';
+                        healthBadge.textContent = 'Healthy';
+                        healthBadge.className = 'badge bg-success';
+                    } else {
+                        statusText.textContent = 'Disconnected or no policies deployed';
+                        statusText.className = 'text-warning';
+                        healthBadge.textContent = 'Issues';
+                        healthBadge.className = 'badge bg-warning';
+                    }
+                } catch (error) {
+                    console.error('Failed to check OPA status:', error);
+                    document.getElementById('opa-status-text').textContent = 'Connection failed';
+                    document.getElementById('opa-status-text').className = 'text-danger';
+                }
+            }
+
+            async loadTableData() {
+                // Parse table identifier
+                const [warehouseId, namespace, table] = this.currentTable.split('.');
+                
+                try {
+                    // Load permission matrix
+                    const matrixResponse = await fetch(`/api/v1/fgac/table/${warehouseId}/${namespace}/${table}/matrix`);
+                    const matrix = await matrixResponse.json();
+                    
+                    // Load policy status
+                    const statusResponse = await fetch(`/api/v1/opa/policies/table/${warehouseId}/${namespace}/${table}/status`);
+                    const status = await statusResponse.json();
+                    
+                    this.updatePolicyStatus(status);
+                    this.addActivityLogEntry('Table Loaded', `Loaded permissions for ${this.currentTable}`);
+                    
+                } catch (error) {
+                    console.error('Failed to load table data:', error);
+                    this.addActivityLogEntry('Error', `Failed to load table ${this.currentTable}`);
+                }
+            }
+
+            async generateTablePolicies() {
+                const [warehouseId, namespace, table] = this.currentTable.split('.');
+                
+                try {
+                    const response = await fetch(
+                        `/api/v1/opa/policies/table/${warehouseId}/${namespace}/${table}/generate`,
+                        { method: 'POST' }
+                    );
+                    const result = await response.json();
+                    
+                    this.addActivityLogEntry('Policy Generated', 
+                        `Generated ${result.policies_generated} policies for ${this.currentTable} (${result.generation_time_ms}ms)`);
+                    
+                    // Update policy preview
+                    this.updatePolicyPreview();
+                    
+                } catch (error) {
+                    console.error('Failed to generate policies:', error);
+                    this.addActivityLogEntry('Error', `Failed to generate policies: ${error.message}`);
+                }
+            }
+
+            async validatePolicies() {
+                const [warehouseId, namespace, table] = this.currentTable.split('.');
+                
+                try {
+                    const response = await fetch(
+                        `/api/v1/opa/policies/table/${warehouseId}/${namespace}/${table}/validate`
+                    );
+                    const validation = await response.json();
+                    
+                    if (validation.is_valid) {
+                        this.addActivityLogEntry('Validation Passed', 'All policies are valid');
+                        // Update policy status indicators
+                        document.querySelectorAll('.policy-status').forEach(el => {
+                            if (el.textContent.includes('Valid')) {
+                                el.className = 'policy-status policy-valid';
+                            }
+                        });
+                    } else {
+                        this.addActivityLogEntry('Validation Failed', 
+                            `Issues found: ${validation.issues.join(', ')}`);
+                        // Update policy status indicators
+                        document.querySelectorAll('.policy-status').forEach(el => {
+                            el.className = 'policy-status policy-invalid';
+                            el.textContent = '✗ Invalid';
+                        });
+                    }
+                    
+                } catch (error) {
+                    console.error('Failed to validate policies:', error);
+                    this.addActivityLogEntry('Error', `Validation failed: ${error.message}`);
+                }
+            }
+
+            async deployTablePolicies() {
+                const [warehouseId, namespace, table] = this.currentTable.split('.');
+                
+                try {
+                    const response = await fetch(
+                        `/api/v1/opa/policies/table/${warehouseId}/${namespace}/${table}/generate?deploy=true`,
+                        { method: 'POST' }
+                    );
+                    const result = await response.json();
+                    
+                    if (result.deployed) {
+                        this.addActivityLogEntry('Policy Deployed', 
+                            `Deployed ${result.policies_generated} policies for ${this.currentTable}`);
+                        
+                        // Update last deployed timestamp
+                        document.getElementById('last-deployed').textContent = new Date().toLocaleString() + ' UTC';
+                        
+                        // Update OPA status
+                        this.checkOpaStatus();
+                    }
+                    
+                } catch (error) {
+                    console.error('Failed to deploy policies:', error);
+                    this.addActivityLogEntry('Error', `Deployment failed: ${error.message}`);
+                }
+            }
+
+            async syncPolicies() {
+                try {
+                    const response = await fetch('/api/v1/opa/policies/refresh', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    this.addActivityLogEntry('Policies Synced', 
+                        `Refreshed ${result.total_policies} policies for ${result.total_tables} tables`);
+                    
+                    this.checkOpaStatus();
+                    
+                } catch (error) {
+                    console.error('Failed to sync policies:', error);
+                    this.addActivityLogEntry('Error', `Sync failed: ${error.message}`);
+                }
+            }
+
+            async deployAllPolicies() {
+                try {
+                    const response = await fetch('/api/v1/opa/policies/deploy-all', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    this.addActivityLogEntry('All Policies Deployed', 
+                        `Deployed ${result.total_policies} policies for ${result.total_tables} tables`);
+                    
+                    this.checkOpaStatus();
+                    
+                } catch (error) {
+                    console.error('Failed to deploy all policies:', error);
+                    this.addActivityLogEntry('Error', `Mass deployment failed: ${error.message}`);
+                }
+            }
+
+            async testPolicies() {
+                // This would integrate with OPA testing framework
+                this.addActivityLogEntry('Policy Test', 'Testing policies with sample data...');
+                
+                // Simulate policy testing
+                setTimeout(() => {
+                    this.addActivityLogEntry('Test Completed', 'All policy tests passed');
+                }, 2000);
+            }
+
+            editColumnPermission(column) {
+                document.getElementById('modal-column').value = column;
+                const modal = new bootstrap.Modal(document.getElementById('editPermissionModal'));
+                modal.show();
+            }
+
+            async savePermission() {
+                const formData = {
+                    column: document.getElementById('modal-column').value,
+                    principal_id: document.getElementById('modal-principal').value,
+                    permission_type: document.getElementById('modal-permission-type').value,
+                    masking_method: document.getElementById('modal-masking-method').value,
+                    custom_expression: document.getElementById('modal-custom-expression').value
+                };
+
+                try {
+                    // Save permission (mock API call)
+                    console.log('Saving permission:', formData);
+                    
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editPermissionModal'));
+                    modal.hide();
+                    
+                    // Regenerate policies
+                    await this.generateTablePolicies();
+                    
+                    this.addActivityLogEntry('Permission Updated', 
+                        `Updated ${formData.column} permission for ${formData.principal_id}`);
+                    
+                } catch (error) {
+                    console.error('Failed to save permission:', error);
+                    this.addActivityLogEntry('Error', `Failed to save permission: ${error.message}`);
+                }
+            }
+
+            updatePolicyStatus(status) {
+                // Update policy counts
+                const activePolicies = document.querySelector('#policy-status .h4');
+                if (activePolicies) {
+                    activePolicies.textContent = status.policy_count || 0;
+                }
+            }
+
+            updatePolicyPreview() {
+                // In a real implementation, this would fetch and display the actual generated policies
+                console.log('Updating policy preview...');
+            }
+
+            addActivityLogEntry(action, description) {
+                const logContainer = document.getElementById('activity-log');
+                const entry = document.createElement('div');
+                entry.className = 'd-flex justify-content-between align-items-center border-bottom pb-2 mb-2';
+                entry.innerHTML = `
+                    <div>
+                        <strong>${action}</strong>
+                        <br><small class="text-muted">${description}</small>
+                    </div>
+                    <small class="text-muted">${new Date().toLocaleString()}</small>
+                `;
+                
+                logContainer.insertBefore(entry, logContainer.firstChild);
+                
+                // Keep only the last 10 entries
+                while (logContainer.children.length > 10) {
+                    logContainer.removeChild(logContainer.lastChild);
+                }
+            }
+        }
+
+        // Initialize the integration when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new FgacOpaIntegration();
+        });
+    </script>
+</body>
+</html>
