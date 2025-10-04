@@ -2,6 +2,7 @@ package trino
 
 import data.trino
 import data.configuration
+import rego.v1
 
 allow_table if {
     allow_table_create

@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::{
     api::{ApiContext, Result},
-    implementations::postgres::CatalogState,
     request_metadata::RequestMetadata,
     service::{authz::Authorizer, Catalog, SecretStore, State, TableId, Transaction},
     WarehouseId,
@@ -171,7 +170,7 @@ pub async fn update_table_fgac<C: Catalog, A: Authorizer, S: SecretStore>(
 pub async fn get_table_fgac_by_name<C: Catalog, A: Authorizer, S: SecretStore>(
     Path((warehouse_identifier, namespace, table_name)): Path<(String, String, String)>,
     AxumState(api_context): AxumState<ApiContext<State<A, C, S>>>,
-    Extension(_metadata): Extension<RequestMetadata>,
+    Extension(metadata): Extension<RequestMetadata>,
 ) -> Result<Json<FgacTableResponse>, StatusCode> {
     use crate::service::{NamespaceIdent, TableIdent, ListFlags};
 
@@ -224,12 +223,9 @@ pub async fn get_table_fgac_by_name<C: Catalog, A: Authorizer, S: SecretStore>(
     let available_columns: Vec<String> = vec![];
 
     // Query column permissions from database
-    // Since this handler is PostgreSQL-specific, we can directly access the catalog state
-    let catalog_state = &api_context.v1_state.catalog;
-    
-    let column_permissions = query_column_permissions_for_ui(
+    let column_permissions = query_column_permissions_for_ui::<C>(
+        &mut transaction,
         table_id,
-        catalog_state,
     )
     .await
     .map_err(|e| {
@@ -238,9 +234,9 @@ pub async fn get_table_fgac_by_name<C: Catalog, A: Authorizer, S: SecretStore>(
     })?;
 
     // Query row policies from database
-    let row_policies = query_row_policies_for_ui(
+    let row_policies = query_row_policies_for_ui::<C>(
+        &mut transaction,
         table_id,
-        catalog_state,
     )
     .await
     .map_err(|e| {
@@ -277,91 +273,104 @@ pub async fn get_table_fgac_by_name<C: Catalog, A: Authorizer, S: SecretStore>(
 }
 
 /// Query column permissions from database for UI display
-/// Since we need PostgreSQL-specific access but the handler is generic,
-/// we use runtime type checking to access the concrete CatalogState.
-async fn query_column_permissions_for_ui<S: 'static>(
-    table_id: TableId,
-    catalog_state: &S,
+async fn query_column_permissions_for_ui<C: Catalog>(
+    transaction: &mut C::Transaction,
+    table_id: TableIdentUuid,
 ) -> Result<Vec<ColumnPermissionInfo>, Box<dyn std::error::Error>> {
-    use std::any::Any;
-    use crate::implementations::postgres::fgac::list_fgac_column_permissions;
+    // Inline SQL query - matches list_fgac_column_permissions but works with generic transaction
+    let rows: Vec<(sqlx::types::Uuid, String, String, String, String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+        r#"
+        SELECT 
+            cp.column_permission_id,
+            cp.column_name,
+            cp.principal_type,
+            cp.principal_id,
+            cp.permission_type,
+            cp.granted_by,
+            cp.granted_at,
+            cp.expires_at
+        FROM column_permissions cp
+        INNER JOIN tabular t ON t.tabular_id = cp.tabular_id
+        WHERE cp.tabular_id = $1
+            AND t.tabular_namespace_name = ARRAY[cp.namespace_name]::text[]
+            AND cp.table_name = t.name
+        ORDER BY cp.column_name, cp.principal_id
+        "#
+    )
+    .bind(table_id.into_uuid())
+    .fetch_all(transaction.transaction())
+    .await
+    .map_err(|e| format!("Database error: {}", e))?;
     
-    // Try to downcast to CatalogState - this will succeed at runtime for PostgreSQL catalog
-    if let Some(concrete_state) = (catalog_state as &dyn Any).downcast_ref::<CatalogState>() {
-        // Call the PostgreSQL-specific helper function with read pool
-        let rows = list_fgac_column_permissions(
-            table_id,
-            &concrete_state.read_pool()
-        )
-        .await
-        .map_err(|e| format!("Database error: {:?}", e))?;
-        
-        // Convert database rows to UI format
-        let permissions = rows
-            .into_iter()
-            .map(|row| ColumnPermissionInfo {
-                column_permission_id: Some(row.column_permission_id.to_string()),
-                column_name: row.column_name,
-                principal_type: row.principal_type,
-                principal_id: row.principal_id,
-                permission_type: row.permission_type,
-                masking_method: None,
-                granted_by: row.granted_by,
-                granted_at: row.granted_at.to_rfc3339(),
-                expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),
+    // Convert database rows to UI format
+    let permissions = rows
+        .into_iter()
+        .map(|(column_permission_id, column_name, principal_type, principal_id, permission_type, granted_by, granted_at, expires_at)| ColumnPermissionInfo {
+            column_permission_id: Some(column_permission_id.to_string()),
+            column_name,
+            principal_type,
+            principal_id,
+            permission_type,
+            masking_method: None, // Not stored in database yet
+            granted_by,
+            granted_at: granted_at.to_rfc3339(),
+            expires_at: expires_at.map(|dt| dt.to_rfc3339()),
         })
-            .collect();
-        
-        Ok(permissions)
-    } else {
-        // Not a PostgreSQL catalog - FGAC not supported
-        tracing::warn!("FGAC is only supported with PostgreSQL catalog");
-        Ok(vec![])
-    }
+        .collect();
+    
+    Ok(permissions)
 }
 
 /// Query row policies from database for UI display
-/// Since we need PostgreSQL-specific access but the handler is generic,
-/// we use runtime type checking to access the concrete CatalogState.
-async fn query_row_policies_for_ui<S: 'static>(
-    table_id: TableId,
-    catalog_state: &S,
+async fn query_row_policies_for_ui<C: Catalog>(
+    transaction: &mut C::Transaction,
+    table_id: TableIdentUuid,
 ) -> Result<Vec<RowPolicyInfo>, Box<dyn std::error::Error>> {
-    use std::any::Any;
-    use crate::implementations::postgres::fgac::list_fgac_row_policies;
+    // Inline SQL query - matches list_fgac_row_policies but works with generic transaction
+    let rows: Vec<(sqlx::types::Uuid, String, String, String, String, String, bool, i32, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+        r#"
+        SELECT 
+            rp.row_policy_id,
+            rp.policy_name,
+            rp.principal_type,
+            rp.principal_id,
+            rp.policy_expression,
+            rp.policy_type,
+            rp.is_active,
+            rp.priority,
+            rp.granted_by,
+            rp.granted_at,
+            rp.expires_at
+        FROM row_policies rp
+        INNER JOIN tabular t ON t.tabular_id = rp.tabular_id
+        WHERE rp.tabular_id = $1
+            AND t.tabular_namespace_name = ARRAY[rp.namespace_name]::text[]
+            AND rp.table_name = t.name
+        ORDER BY rp.priority DESC, rp.policy_name
+        "#
+    )
+    .bind(table_id.into_uuid())
+    .fetch_all(transaction.transaction())
+    .await
+    .map_err(|e| format!("Database error: {}", e))?;
     
-    // Try to downcast to CatalogState - this will succeed at runtime for PostgreSQL catalog
-    if let Some(concrete_state) = (catalog_state as &dyn Any).downcast_ref::<CatalogState>() {
-        // Call the PostgreSQL-specific helper function with read pool
-        let rows = list_fgac_row_policies(
-            table_id,
-            &concrete_state.read_pool()
-        )
-        .await
-        .map_err(|e| format!("Database error: {:?}", e))?;
-        
-        // Convert database rows to UI format
-        let policies = rows
-            .into_iter()
-            .map(|row| RowPolicyInfo {
-                row_policy_id: Some(row.row_policy_id.to_string()),
-                policy_name: row.policy_name,
-                principal_type: row.principal_type,
-                principal_id: row.principal_id,
-                policy_expression: row.policy_expression,
-                policy_type: row.policy_type,
-                is_active: row.is_active,
-                priority: row.priority,
-                granted_by: row.granted_by,
-                granted_at: row.granted_at.to_rfc3339(),
-                expires_at: row.expires_at.map(|dt| dt.to_rfc3339()),
-            })
-            .collect();
-        
-        Ok(policies)
-    } else {
-        // Not a PostgreSQL catalog - FGAC not supported
-        tracing::warn!("FGAC is only supported with PostgreSQL catalog");
-        Ok(vec![])
-    }
+    // Convert database rows to UI format
+    let policies = rows
+        .into_iter()
+        .map(|(row_policy_id, policy_name, principal_type, principal_id, policy_expression, policy_type, is_active, priority, granted_by, granted_at, expires_at)| RowPolicyInfo {
+            row_policy_id: Some(row_policy_id.to_string()),
+            policy_name,
+            principal_type,
+            principal_id,
+            policy_expression,
+            policy_type,
+            is_active,
+            priority,
+            granted_by,
+            granted_at: granted_at.to_rfc3339(),
+            expires_at: expires_at.map(|dt| dt.to_rfc3339()),
+        })
+        .collect();
+    
+    Ok(policies)
 }

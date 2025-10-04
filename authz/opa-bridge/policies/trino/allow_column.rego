@@ -1,6 +1,7 @@
 package trino
 
 import data.trino
+import rego.v1
 import data.configuration
 
 # Column-level access control (simplified demo version)

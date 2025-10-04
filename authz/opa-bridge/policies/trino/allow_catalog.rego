@@ -2,6 +2,7 @@ package trino
 
 import data.trino
 import data.configuration
+import rego.v1
 
 allow_catalog if {
     allow_catalog_management

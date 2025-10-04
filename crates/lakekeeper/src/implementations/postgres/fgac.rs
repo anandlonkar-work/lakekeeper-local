@@ -52,7 +52,7 @@ pub(crate) async fn list_fgac_column_permissions<
             cp.expires_at
         FROM column_permissions cp
         JOIN tabular t ON cp.warehouse_id = t.warehouse_id 
-            AND cp.namespace_name = t.namespace_name 
+            AND cp.namespace_name = array_to_string(t.tabular_namespace_name, '.') 
             AND cp.table_name = t.name
         WHERE t.tabular_id = $1
             AND t.typ = 'table'
@@ -93,7 +93,7 @@ pub(crate) async fn list_fgac_row_policies<
             rp.expires_at
         FROM row_policies rp
         JOIN tabular t ON rp.warehouse_id = t.warehouse_id 
-            AND rp.namespace_name = t.namespace_name 
+            AND rp.namespace_name = array_to_string(t.tabular_namespace_name, '.') 
             AND rp.table_name = t.name
         WHERE t.tabular_id = $1
             AND t.typ = 'table'

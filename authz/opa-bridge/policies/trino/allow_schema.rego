@@ -2,6 +2,7 @@ package trino
 
 import data.trino
 import data.configuration
+import rego.v1
 
 allow_schema if {
     allow_schema_create

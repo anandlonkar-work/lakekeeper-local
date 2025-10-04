@@ -13,7 +13,7 @@ services:
       - "8888:8888"
 
   opa:
-    image: openpolicyagent/opa:latest-rootless
+    image: openpolicyagent/opa:latest
     command: ["run", "--server", "--log-format", "text", "--log-level", "debug", "--addr", "0.0.0.0:8181", "/policies"]
     volumes:
       - ../../authz/opa-bridge/policies:/policies

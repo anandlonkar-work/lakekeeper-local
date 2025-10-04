@@ -1,6 +1,7 @@
 package trino
 
 import data.trino
+import rego.v1
 import data.configuration
 
 allow_view if {

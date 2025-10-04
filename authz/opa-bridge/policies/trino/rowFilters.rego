@@ -55,9 +55,9 @@ rowFilters contains {"expression": filter.expression} if {
     filter := filters[_]
 }
 
-# Fallback: If Lakekeeper is unreachable or returns error, apply safe defaults
+# Fallback: If Lakekeeper is unreachable or returns error, the rowFilters set will be empty
 # Empty rowFilters means no restrictions (allow all rows)
-default rowFilters := set()
+# Note: No default needed - an undefined set is already empty in Rego
 
 # Debug logging
 debug_info := {
